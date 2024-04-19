@@ -1,0 +1,35 @@
+DATA seattle-weather.csv as sw
+
+VCONCAT
+    "yoy"
+    POINT
+    ENCODE
+        X   format(sw.date, 'MM')
+        Y   sw.temp_max
+            SCALE DOMAIN [-5, 40]
+        SIZE    sw.precipitation
+            SCALE DOMAIN [-1, 50]
+        COLOR ( case when THIS in yoy.day_brush then sw.weather::N =
+            { 'sun'     : '#e7ba52',
+              'fog'     : '#a7a7a7',
+              'drizzle' : '#aec7e8',
+              'rain'    : '#1f77b4',
+              'snow'    : '#9467bd' })
+             else 'lightgrey' end )
+    SELECTION "day_brush" INTERVAL [X]
+    FILTER  weather_type.click
+
+    "weather_type"
+    BAR
+    ENCODE
+        X count(*)
+        Y sw.weather
+        COLOR (case when THIS in weather_type.click then sw.weather =
+            { 'sun'     : '#e7ba52',
+              'fog'     : '#a7a7a7',
+              'drizzle' : '#aec7e8',
+              'rain'    : '#1f77b4',
+              'snow'    : '#9467bd' }
+             else 'lightgrey' end )
+    SELECT POINT [COLOR]
+    FILTER yoy.day_brush

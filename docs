@@ -1,0 +1,2 @@
+"ENCODING" is the part that's sent out to every row in your dataset,
+telling it where it should be and how it should look.

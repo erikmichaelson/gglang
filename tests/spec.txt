@@ -1,0 +1,20 @@
+/*  want this as close to SQL as possible for translatability.
+    data has to be top-level and declared at the top of the page 
+    for consistency.
+*/
+DATA {dataset source} {OPTIONAL as { alias } }
+
+{ OPTIONAL "name" } /* maybe name shouldn't be optional... */
+{ MARK }
+ENCODE
+    X   { dataset.fieldname } { OPTIONAL :: { TYPE } }
+    Y   { dataset.fieldname } { OPTIONAL :: { TYPE } }
+
+/* CONDITION syntax */
+/* nevermind - maybe specifying CONDITION when it's obvious from
+   just tossing a boolean-returning function is too wordy */
+
+CONDITION { PARAM
+/* do we want to do PARAM as it's own thing, or let the user specify
+   that with "in {dataset}"? Do we want params to be there own thing
+   instead of just being */
