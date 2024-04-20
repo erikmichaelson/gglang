@@ -22,7 +22,7 @@ class Plot():
 
 class Table(Plot):
     def __init__(self, row=None, col=None, value=None):
-        super().__init__(plot_type = 'TABLE')
+        self.plot_type = 'TABLE'
         self.row   = row
         self.col   = col
         self.value = value
@@ -52,7 +52,7 @@ class Table(Plot):
 
 class Dot(Plot):
     def __init__(self, x=None, y=None, color=None, size=None):
-        super().__init__(plot_type = 'DOT')
+        self.plot_type = 'DOT'
         self.x = x
         self.y = y
         self.color = color
