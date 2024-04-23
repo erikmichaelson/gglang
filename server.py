@@ -1,4 +1,4 @@
-from flask import Flask
+from flask import Flask, request
 import typing
 import duckdb
 import parse
@@ -15,10 +15,14 @@ window.onload = (() => {
     }
 });
 
+var selected;
 function invert_table(clicked_element) {
-    console.log("clicked_element called")
+    change_selected(clicked_element);
+    if(!selected) {
+        return;
+    }
     // get the first element - this is the row-pivoted "groupby" value
-    row_value = clicked_element.parentElement.children[0].innerHTML
+    row_value = clicked_element.parentElement.children[0].innerHTML.replaceAll('"','')
     // *should* assert this is a <th> and the thing was written right
     col_value = clicked_element.parentElement.parentElement.children[0].innerHTML
 
@@ -28,15 +32,42 @@ function invert_table(clicked_element) {
     if(clicked_element.cellIndex == 0) {
         col_query = col_query.substr(7) // removes 'select\\n'
     }
-    var re = /group by (\w+)\\n/
-    const rows = re.exec(og_query)
+    var re = /group by (\w+)/
+    const rows = re.exec(og_query)[1]
     // first "match" is always the full thing
     re = /(sum|avg|min|max)\(case when (\w+) = (['|\w]+) then (\w+) else 0 end\)/
     res = re.exec(col_query) 
     re = /from ([\.|'|/|\w]+)/
     data_source = re.exec(og_query)[1]
-    console.log('select * from '+data_source+' where '+res[2]+' = '+res[3]+' and '+rows+' = '+row_value)
-    return 'select * from {data_source} where {res[2]} = {res[3]} and {rows} = {row_value}'
+    const query = 'select * from '+data_source+' where '+res[2]+' = '+res[3]+' and '+rows+" = '"+row_value+"'"
+    console.log(query)
+    fetch('/query', {
+        method: "POST",
+        headers: { "Content-Type" : "application/json" },
+        body: JSON.stringify(query),
+    }).then(function(response) {
+        return response.text();
+    }).then(function(HTML) {
+        if(selected) {
+            document.getElementsByClassName("res-container")[0].innerHTML = HTML;
+        }
+    });
+
+    return query
+}
+
+function change_selected(element) {
+    console.log("change_selected called");
+    if(selected) {
+        selected.className = null;
+        if(selected == element) {
+            document.getElementsByClassName("res-container")[0].innerHTML = null;
+            selected = null;
+            return;
+        }
+    }
+    selected = element;
+    selected.className = "highlighted";
 }
 </script>
 <style>
@@ -44,8 +75,19 @@ function invert_table(clicked_element) {
     visibility:hidden;
     height: 0;
 }
+.res-container {
+    overflow: scroll;
+    width: 1400px;
+}
+.highlighted {
+    background: pink;
+}
 </style>'''
 
+
+@app.route('/query', methods=['POST'])
+def query():
+    return duckdb.sql(request.get_json()).pl()._repr_html_()
 
 @app.route('/')
 def index():
@@ -55,7 +97,7 @@ def index():
 def recreate(sql:str) -> str:
     table_object = f'<div><div class="query">{sql}</div>'
     table_object += duckdb.sql(sql).pl()._repr_html_()
-    table_object += '</div>'
+    table_object += '<div class="res-container"></div>  </div>'
     return table_object
 
 if __name__ == '__main__':
