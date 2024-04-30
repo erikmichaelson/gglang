@@ -20,6 +20,22 @@ class Plot():
     def sql(self) -> str:
         raise "Not implemented"
 
+class Map():
+    def __init__(self, geometry=None, color=None, tooltip=None, limit=None):
+        self.plot_type   = 'MAP'
+        self.data_source = None
+        self.geometry    = geometry
+        self.color       = color
+        self.tooltip     = tooltip
+        self.limit       = limit
+    def sql(self):
+        ret = f"copy (select ST_Transform({self.geometry}, 'epsg:26915','epsg:4326') as geom "
+        if self.color:
+            ret += f',{color} '
+        limit = f' limit {self.limit} ' if self.limit else ''
+        ret += f"from {self.data_source} {limit}) to 'test.geojson' with (format gdal, driver geojson);"
+        return ret
+
 class Table(Plot):
     def __init__(self, row=None, col=None, value=None):
         self.plot_type = 'TABLE'
@@ -86,13 +102,20 @@ def parse(text: str) -> Plot:
             ret = Table()
             print(f'table init called, {ret.plot_type}')
         elif l[0] == 'dot':
-            ret == Dot()
+            ret = Dot()
+        elif l[0] == 'map':
+            ret = Map()
         elif l[0] == 'row':
             assert ret.plot_type == 'TABLE', f'plot type = {ret.plot_type}'
             ret.row = l[1]
         elif l[0] == 'col':
             assert ret.plot_type == 'TABLE', f'plot type = {ret.plot_type}'
             ret.col = l[1]
+        elif l[0] == 'geometry':
+            assert ret.plot_type == 'MAP', f'plot type = {ret.plot_type}'
+            ret.geometry = l[1]
+        elif l[0] == 'limit':
+            ret.limit = l[1]
         elif l[0] == 'value':
             assert ret.plot_type == 'TABLE', f'plot type = {ret.plot_type}'
             # for now all tables are pivot tables - split_agg is called in the sql() func

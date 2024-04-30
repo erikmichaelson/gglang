@@ -3,4 +3,4 @@ data ../data/hmda/2023_combined_mlar.parquet hmda
 table
     row   state_code
     col   loan_type
-    value avg(loan_amount)
+    value sum(loan_amount)
