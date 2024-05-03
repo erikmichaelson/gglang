@@ -3,6 +3,7 @@ import typing
 import duckdb
 import parse
 import sys
+from gg_types import *
 
 app = Flask(__name__)
 
@@ -94,46 +95,11 @@ def index():
     global HTML
     return HTML
 
-def table_from_sql(sql:str) -> str:
-    table_object = f'<div><div class="query">{sql}</div>'
-    table_object += duckdb.sql(sql).pl()._repr_html_()
-    table_object += '<div class="res-container"></div>  </div>'
-    return table_object
-
-def map_from_sql(sql:str) -> str:
-     # this just writes a geojson file - I have to read it
-     duckdb.sql('load spatial')
-     duckdb.sql(sql)
-     geojson = open('test.geojson').read()
-     ret = f'''
-     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-     integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
-     crossorigin=""/>
-     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-     integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
-     crossorigin=""></script>
-
-     <div id="map" style="height:500"></div>'''
-     ret += '''
-     <script>
-        var map = L.map('map').setView([37.8, -96], 4);
-        var tiles = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            maxZoom: 19,
-            attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-        }).addTo(map);
-     '''
-     ret += f'''
-        const data = {geojson};
-        console.log(data);
-        L.geoJson(data).addTo(map);
-     </script>
-     '''
-     return ret
-
 if __name__ == '__main__':
     plot = parse.parse(open(sys.argv[1]).read())
     sql = plot.sql()
     print(sql)
-    #HTML += table_from_sql(sql)
-    HTML += map_from_sql(sql)
+    #HTML += table_from_spec(plot)
+    #HTML += map_from_spec(plot)
+    HTML += dot_from_spec(plot)
     app.run()
