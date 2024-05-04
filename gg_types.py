@@ -26,7 +26,7 @@ class Map(Plot):
     def __init__(self, geometry=None, color=None, tooltip=None, limit=None):
         self.plot_type   = 'MAP'
         self.data_source = None
-        self.data_alias  = data_alias
+        self.data_alias  = None
         self.geometry    = geometry
         self.color       = color
         self.tooltip     = tooltip
@@ -73,7 +73,7 @@ class Table(Plot):
     def __init__(self, row=None, col=None, value=None):
         self.plot_type = 'TABLE'
         self.data_source = None
-        self.data_alias = data_alias
+        self.data_alias = None
         self.row    = row
         self.col    = col
         self.value  = value
@@ -110,17 +110,18 @@ class Dot(Plot):
     def __init__(self, x=None, y=None, color=None, size=None):
         self.plot_type = 'DOT'
         self.data_source = None
-        self.data_alias = data_alias
+        self.data_alias = None
+        self.params = None
         self.x = x
         self.y = y
         self.color = color
         self.size  = size
     def html(self):
-        sql = plot.sql()
+        sql = self.sql()
         predicated = False
         if 'where' in sql:
             predicated = True
-        if plot.params.name:
+        if self.params.name:
             if not predicated:
                 dot_plot += 'where'
             params = duckdb.sql(f'select * from params where param = {name}').fetchall()

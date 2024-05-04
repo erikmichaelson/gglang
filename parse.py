@@ -2,6 +2,36 @@ import duckdb
 import sys
 from gg_types import *
 
+# to make it easy one element can't wrap over a line.
+# break characters are parens and spaces - if they're not wrapped in parens
+# max depth we deal with here is 1
+def lex(line: str) -> [str]:
+    line = line.strip()
+    ret = []
+    depth = 0
+    start = 0
+    last_char = None
+    for i,c in enumerate(line):
+        if c == '(':
+            if depth == 0:
+                start = i
+            depth += 1
+        elif c == ')':
+            depth -= 1
+            assert depth >= 0, f"ERROR: unmatched ')' character # {i} : {c}"
+            if depth == 0:
+                ret.append(line[start:i+1])
+        elif c == ' ':
+            if depth == 0 and last_char not in (' ', '(', ')'):
+                ret.append(line[start:i])
+        else:
+            if depth == 0 and last_char in (' ', ')'):
+                start = i
+        last_char = c
+    # get the last word in there
+    ret.append(line[start:])
+    return ret
+
 def parse(text: str) -> Plot:
     text = text.lower()
     lines = text.split('\n')
@@ -9,29 +39,23 @@ def parse(text: str) -> Plot:
     data_source = None
     data_alias = None
     for l in lines:
-        l = [l for l in l.strip().split(' ') if l != '']
+        #l = [l for l in l.strip().split(' ') if l != '']
+        l = lex(l)
+        print(l)
         if l == []:
             continue
-        #print(l)
-        if l[0] == 'data':
-            i = 1
-            if l[i][0] == '(':
-                tmp = []
-                while l[i][-1] != ')':
-                    tmp.append(l[i])
-                    i += 1
-                tmp.append(l[i])
-                i += 1
-            data_source = l[i]
-            if len(l) == 3:
-                data_alias = l[2]
+        elif l[0] == 'data':
+            data_source = l[1] # this will be a sql expression or raw data_source
+            view_sql = ''
+            assert len(l) == 3, "ERROR: need format 'data [SQL | PATH] [DATA_ALIAS]'"
+            data_alias = l[2]
+            if data_source[1][0] == '(':
                 view_sql = f"create view {data_alias} as (select * from '{data_source}');"
             else:
-                assert len(l) == i + 1, "ERROR: need a data alias for custom SQL data"
-                view_sql = f"create view {data_alias} as {' '.join(tmp)};"
-                print(view_sql)
-                duckdb.sql(view_sql)
-                
+                view_sql = f"create view {data_alias} as ({data_source});"
+            print(view_sql)
+            duckdb.sql(view_sql)
+
         elif l[0] == 'table':
             ret = Table()
             print(f'table init called, {ret.plot_type}')

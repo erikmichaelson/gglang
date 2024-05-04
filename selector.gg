@@ -1,4 +1,4 @@
-data (select row_number as id, * from '../data/hmda/2023_combined_mlar.parquet') hmda
+data (select row_number() over () as id, * from '../data/hmda/2023_combined_mlar.parquet') hmda
 stream (select hmda.* from hmda where hmda.id = amt.id) price_range 
 
 dot
