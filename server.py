@@ -99,7 +99,5 @@ if __name__ == '__main__':
     plot = parse.parse(open(sys.argv[1]).read())
     sql = plot.sql()
     print(sql)
-    #HTML += table_from_spec(plot)
-    #HTML += map_from_spec(plot)
-    HTML += dot_from_spec(plot)
+    HTML += plot.html()
     app.run()

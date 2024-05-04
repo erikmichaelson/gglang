@@ -50,9 +50,9 @@ def parse(text: str) -> Plot:
             assert len(l) == 3, "ERROR: need format 'data [SQL | PATH] [DATA_ALIAS]'"
             data_alias = l[2]
             if data_source[1][0] == '(':
-                view_sql = f"create view {data_alias} as (select * from '{data_source}');"
-            else:
                 view_sql = f"create view {data_alias} as ({data_source});"
+            else:
+                view_sql = f"create view {data_alias} as (select * from {data_source});"
             print(view_sql)
             duckdb.sql(view_sql)
 
@@ -85,9 +85,10 @@ def parse(text: str) -> Plot:
             assert ret.plot_type == 'DOT'
             ret.y = l[1]
         elif l[0] == 'param':
+            duckdb.sql("create table params (name text, variable text, value float) ")
             assert ret.plot_type is not None
             ret.params.name = l[1]
-            for i in range(1, len(l)):
+            for i in range(2, len(l)):
                 assert l[i] in ['x', 'y']
                 ret.params.p.append(l[i])
     assert data_source is not None, "ERROR: no data source specified"

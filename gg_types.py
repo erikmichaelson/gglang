@@ -1,3 +1,5 @@
+import duckdb
+
 class Agg_Value():
     def __init__(self, agg_func, ref):
         self.agg_func = agg_func
@@ -16,7 +18,7 @@ class Plot():
         self.plot_type = plot_type
         self.data_source = data_source
         self.data_alias = data_alias
-        self.params = None
+        self.params = {'name': None, 'p': None}
     def html(self) -> str:
         raise "ERROR: called on abstract class"
     def sql(self) -> str:
@@ -31,7 +33,7 @@ class Map(Plot):
         self.color       = color
         self.tooltip     = tooltip
         self.limit       = limit
-        self.params      = {name: None, p: None}
+        self.params      = {'name': None, 'p': None}
     def html(self):
         # this just writes a geojson file - I have to read it
         duckdb.sql('load spatial')
@@ -77,7 +79,7 @@ class Table(Plot):
         self.row    = row
         self.col    = col
         self.value  = value
-        self.params = {name: None, p: None}
+        self.params = {'name': None, 'p': None}
     def html(self):
         table_object = f'<div><div class="query">{self.sql()}</div>'
         table_object += duckdb.sql(sql).pl()._repr_html_()
@@ -111,7 +113,7 @@ class Dot(Plot):
         self.plot_type = 'DOT'
         self.data_source = None
         self.data_alias = None
-        self.params = None
+        self.params = {'name': None, 'p': None}
         self.x = x
         self.y = y
         self.color = color
@@ -121,22 +123,28 @@ class Dot(Plot):
         predicated = False
         if 'where' in sql:
             predicated = True
-        if self.params.name:
+        if self.params['name']:
             if not predicated:
                 dot_plot += 'where'
             params = duckdb.sql(f'select * from params where param = {name}').fetchall()
             for p in params:
                 sql += p[0] + ' and '
             sql += 'true' # taking out ifs for adding ands
-        dot_plot = f'<div><div class="query">{sql}</div>'
-        dot_plot += '</div>'
+        dot_plot = f'<div><div class="query">{sql}</div><svg height="600" width="600" viewport="0 0 600 600">'
+        res = duckdb.sql(f'select min({self.x}), max({self.x}), min({self.y}), max({self.y}) from {self.data_alias}').fetchall()[0]
+        print(res)
+        minx, maxx, miny, maxy = res
+        for d in duckdb.sql(sql).fetchall():
+            dot_plot += f'<circle cx="{((d[0] - minx) * 600) / (maxx - minx)}" cy="{600 - (((d[1] - miny) * 600) / (maxy - miny))}" r="3" color="black"/>'
+        dot_plot += '</svg></div>'
+        print(len(dot_plot))
         return dot_plot
     def sql(self):
-        ret = 'select {self.x}, {self.y},'
-        if color is not None:
-            ret += ' {self.color}, '
-        if size is not None:
-            ret += ' {self.size} '
+        ret = f'select {self.x}, {self.y},'
+        if self.color is not None:
+            ret += f' {self.color}, '
+        if self.size is not None:
+            ret += f' {self.size} '
         ret += f"from '{self.data_alias}' "
         return ret
 
