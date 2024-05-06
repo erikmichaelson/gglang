@@ -130,13 +130,17 @@ class Dot(Plot):
             for p in params:
                 sql += p[0] + ' and '
             sql += 'true' # taking out ifs for adding ands
-        dot_plot = f'<div><div class="query">{sql}</div><svg height="600" width="600" viewport="0 0 600 600">'
+        dot_plot = f'<div><div class="query">{sql}</div><svg height="600" width="600" viewport="0 0 600 600"'
+        #if self.params['name']:
+        dot_plot += 'onmousemove="move_listener(event)" onmouseup="up_listener()"'
+        dot_plot += '>'
         res = duckdb.sql(f'select min({self.x}), max({self.x}), min({self.y}), max({self.y}) from {self.data_alias}').fetchall()[0]
         print(res)
         minx, maxx, miny, maxy = res
         for d in duckdb.sql(sql).fetchall():
-            dot_plot += f'<circle cx="{((d[0] - minx) * 600) / (maxx - minx)}" cy="{600 - (((d[1] - miny) * 600) / (maxy - miny))}" r="3" color="black"/>'
+            dot_plot += f'<circle cx="{((d[0] - minx) * 600) / (maxx - minx)}" cy="{600 - (((d[1] - miny) * 600) / (maxy - miny))}" r="3" color="black"/>\n'
         dot_plot += '</svg></div>'
+        dot_plot += '<h1 class="sel_counter">-</div>'
         print(len(dot_plot))
         return dot_plot
     def sql(self):

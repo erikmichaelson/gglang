@@ -91,10 +91,11 @@ def parse(text: str) -> Plot:
             for i in range(2, len(l)):
                 assert l[i] in ['x', 'y']
                 ret.params.p.append(l[i])
+                duckdb.sql(f"insert int params values ({l[1]}, {l[2]}, null);")
     assert data_source is not None, "ERROR: no data source specified"
     ret.data_source = data_source
-    if data_alias is not None:
-        ret.data_alias = data_alias
+    assert data_alias is not None, "ERROR: no data alias specified"
+    ret.data_alias = data_alias
     return ret
 
 if __name__ == '__main__':
