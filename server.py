@@ -106,8 +106,9 @@ function up_listener(param_name) {
     fetch('/query',
         method : 'POST',
         headers: {'message-type' : 'application/json'},
-        body : json.stringify(query)
-    }).then(document.getElementsByClassName('sel_counter')[0].innerHTML = num;)
+        body : json.stringify(param: param_name, v_vs: {first_x: x0, second_x: x1, first_y: y0, second_y: y1} )
+    }).then((num) =>
+        document.getElementsByClassName('sel_counter')[0].innerHTML = num;)
 }
 
 </script>
@@ -129,10 +130,27 @@ function up_listener(param_name) {
 }
 </style>'''
 
+plots = []
+conn = duckdb.connect(':memory:')
+
+@app.route('/param_update_plots', methods=['POST'])
+def param_update_plots():
+    req = request.get_json()
+    print('param named',req['param'], '; v_vs', req['v_vs']);
+    streams = conn.sql(f"""select data_depedencies from params where param_name = '{req["param"]}' """).fetchall()
+    for s in streams:
+        print(s)
+        swapped_data_def = s[1].replace(f'${req["param"]}', f'${p_value}')
+        dependencies = conn.sql("select plot_dependencies from data where data_alias = '{s}' ").fetchall()
+        conn.sql(f"create or replace view {data_alias} as ({swapped_data_def}) ")
+        global plots
+        for p in dependencies:
+            if p.id == '':
+                p.update()
 
 @app.route('/query', methods=['POST'])
 def query():
-    return duckdb.sql(request.get_json()).pl()._repr_html_()
+    return conn.sql(request.get_json()).pl()._repr_html_()
 
 @app.route('/')
 def index():
@@ -140,8 +158,11 @@ def index():
     return HTML
 
 if __name__ == '__main__':
-    plot = parse.parse(open(sys.argv[1]).read())
-    sql = plot.sql()
-    print(sql)
-    HTML += plot.html()
+    # the database stores all of the parsed params and streams needed at runtime
+    plots = parse.parse(conn, open(sys.argv[1]).read())
+    print("params still visibile back in server main:", conn.sql("select distinct name from params;").fetchall())
+    for p in plots.values():
+        sql = p.sql(conn)
+        print(sql)
+        HTML += p.html(conn)
     app.run()

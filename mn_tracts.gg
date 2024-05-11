@@ -1,5 +1,5 @@
-data '../data/hennepin_parcels/County_Parcels.shp' parcels
+data '../data/hennepin_parcels/County_Parcels2024/County_Parcels.shp' parcels
 
 map
     geometry geom
-    limit 100
+    limit 10000

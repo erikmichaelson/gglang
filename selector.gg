@@ -1,11 +1,10 @@
-data (select row_number() over () as id, * from '../data/hmda/2023_combined_mlar.parquet') hmda
-stream (select hmda.* from hmda where hmda.id = amt.id) price_range 
+data (select row_number() over () as id, * from '../data/hmda/2023_combined_mlar.parquet' limit 1000) hmda
+data (select count(*)::float / 1000 from hmda where hmda.loan_amount between $amt.xmin and $amt.xmax) price_range 
 
 dot
     x hmda.loan_amount
     y hmda.rate_spread
-    param "amt" x
+    param amt x
 
-table
-    row $ROW
-    col $COL
+text
+    value price_range

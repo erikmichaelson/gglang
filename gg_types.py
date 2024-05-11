@@ -18,11 +18,10 @@ class Plot():
         self.plot_type = plot_type
         self.data_source = data_source
         self.data_alias = data_alias
-        self.params = {'name': None, 'p': None}
-    def html(self) -> str:
-        raise "ERROR: called on abstract class"
-    def sql(self) -> str:
-        raise "ERROR: called on abstract class"
+    def html(self, db) -> str:
+        raise Exception("ERROR: called on abstract class")
+    def sql(self, db) -> str:
+        raise Exception("ERROR: called on abstract class")
 
 class Map(Plot):
     def __init__(self, geometry=None, color=None, tooltip=None, limit=None):
@@ -33,11 +32,10 @@ class Map(Plot):
         self.color       = color
         self.tooltip     = tooltip
         self.limit       = limit
-        self.params      = {'name': None, 'p': None}
-    def html(self):
+    def html(self, db):
         # this just writes a geojson file - I have to read it
-        duckdb.sql('load spatial')
-        duckdb.sql(self.sql())
+        db.sql('load spatial')
+        db.sql(self.sql(db))
         geojson = open('test.geojson').read()
         ret = f'''
         <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
@@ -63,7 +61,7 @@ class Map(Plot):
         </script>
         '''
         return ret
-    def sql(self):
+    def sql(self, db):
         ret = f"copy (select ST_Transform({self.geometry}, 'epsg:26915','epsg:4326') as geom "
         if self.color:
             ret += f',{color} '
@@ -79,14 +77,13 @@ class Table(Plot):
         self.row    = row
         self.col    = col
         self.value  = value
-        self.params = {'name': None, 'p': None}
-    def html(self):
-        table_object = f'<div><div class="query">{self.sql()}</div>'
-        table_object += duckdb.sql(sql).pl()._repr_html_()
+    def html(self, db):
+        table_object = f'<div><div class="query">{self.sql(db)}</div>'
+        table_object += db.sql(sql, db).pl()._repr_html_()
         table_object += '<div class="res-container"></div></div>'
         return table_object
-    def sql(self):
-        col_values = duckdb.query(f"select distinct {self.col} from '{self.data_alias}'").fetchall()
+    def sql(self, db):
+        col_values = db.query(f"select distinct {self.col} from '{self.data_alias}'").fetchall()
         col_values = [c[0] for c in col_values]
         print(col_values)
         self.value = split_agg(self.value)
@@ -113,37 +110,29 @@ class Dot(Plot):
         self.plot_type = 'DOT'
         self.data_source = None
         self.data_alias = None
-        self.params = {'name': None, 'p': None}
         self.x = x
         self.y = y
         self.color = color
         self.size  = size
-    def html(self):
-        sql = self.sql()
+    def html(self, db):
+        sql = self.sql(db)
         predicated = False
         if 'where' in sql:
             predicated = True
-        if self.params['name']:
-            if not predicated:
-                dot_plot += 'where'
-            params = duckdb.sql(f'select * from params where param = {name}').fetchall()
-            for p in params:
-                sql += p[0] + ' and '
-            sql += 'true' # taking out ifs for adding ands
         dot_plot = f'<div><div class="query">{sql}</div><svg height="600" width="600" viewport="0 0 600 600"'
         #if self.params['name']:
         dot_plot += 'onmousemove="move_listener(event)" onmouseup="up_listener()"'
         dot_plot += '>'
-        res = duckdb.sql(f'select min({self.x}), max({self.x}), min({self.y}), max({self.y}) from {self.data_alias}').fetchall()[0]
+        res = db.sql(f'select min({self.x}), max({self.x}), min({self.y}), max({self.y}) from {self.data_alias}', db).fetchall()[0]
         print(res)
         minx, maxx, miny, maxy = res
-        for d in duckdb.sql(sql).fetchall():
+        for d in db.sql(sql, db).fetchall():
             dot_plot += f'<circle cx="{((d[0] - minx) * 600) / (maxx - minx)}" cy="{600 - (((d[1] - miny) * 600) / (maxy - miny))}" r="3" color="black"/>\n'
         dot_plot += '</svg></div>'
         dot_plot += '<h1 class="sel_counter">-</div>'
         print(len(dot_plot))
         return dot_plot
-    def sql(self):
+    def sql(self, db):
         ret = f'select {self.x}, {self.y},'
         if self.color is not None:
             ret += f' {self.color}, '
@@ -156,7 +145,7 @@ class Line(Plot):
     def __init__(self):
         pass
     def html(self):
-        sql = plot.sql()
+        sql = self.sql(db)
         predicated = False
         line_plot = f'<div><div class="query">{sql}</div>'
         if 'where' in sql:
@@ -166,5 +155,38 @@ class Line(Plot):
                 line_plot += 'where'
         line_plot += '</div>'
         return line_plot
-    def sql(self):
+    def sql(self, db):
         pass
+
+class Text(Plot):
+    def __init__(self):
+        self.plot_type = 'TEXT'
+        self.x = None
+        self.y = None
+        self.value = None
+        self.data_source = None
+        self.data_alias = None
+    def html(self, db):
+        sql = self.sql(db)
+        res = db.sql(sql).fetchall()
+        ret = ''
+        if(len(res[0]) == 1):
+            for value in res:
+                ret += f'<h3 class="text">{res[0]}</h3>'
+        elif(len(res[0]) == 2):
+            ret = '<svg>'
+            raise Exception("Single variable TEXT not implemented")
+        elif(len(res[0]) == 3):
+            ret = '<svg>'
+            raise Exception("Double variable TEXT not implemented")
+        return ret
+
+    def sql(self, db):
+        ret = f'select {self.value} '
+        assert self.value is not None, "VALUE needed for Text plot type"
+        if(self.x):
+            ret += f',{self.x}'
+        if(self.y):
+            ret += f',{self.y}'
+        ret += f' from {self.data_alias}'
+        return ret
