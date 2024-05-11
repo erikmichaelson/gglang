@@ -161,6 +161,8 @@ if __name__ == '__main__':
     # the database stores all of the parsed params and streams needed at runtime
     plots = parse.parse(conn, open(sys.argv[1]).read())
     print("params still visibile back in server main:", conn.sql("select distinct name from params;").fetchall())
+    print("data still visibile back in server main:", conn.sql("select distinct name from data;").fetchall())
+    print(len(plots), 'plots displaying')
     for p in plots.values():
         sql = p.sql(conn)
         print(sql)

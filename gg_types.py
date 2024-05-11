@@ -79,7 +79,7 @@ class Table(Plot):
         self.value  = value
     def html(self, db):
         table_object = f'<div><div class="query">{self.sql(db)}</div>'
-        table_object += db.sql(sql, db).pl()._repr_html_()
+        table_object += db.sql(sql).pl()._repr_html_()
         table_object += '<div class="res-container"></div></div>'
         return table_object
     def sql(self, db):
@@ -123,10 +123,17 @@ class Dot(Plot):
         #if self.params['name']:
         dot_plot += 'onmousemove="move_listener(event)" onmouseup="up_listener()"'
         dot_plot += '>'
-        res = db.sql(f'select min({self.x}), max({self.x}), min({self.y}), max({self.y}) from {self.data_alias}', db).fetchall()[0]
+        # eventually I'd like this to "resolve" the source table automatically from the column reference, but until then...
+        param_source = ''
+        try:
+            param_source = self.x.split('.')[0]
+        except:
+            raise Exception("ERROR: you need to specify the data source name for each encoding")
+        # if it errors out after this type cast we just let it. The user has to supply columns w/ correct data types
+        res = db.sql(f'select min({self.x}::float), max({self.x}::float), min({self.y}::float), max({self.y}::float) from {param_source}').fetchall()[0]
         print(res)
         minx, maxx, miny, maxy = res
-        for d in db.sql(sql, db).fetchall():
+        for d in db.sql(sql).fetchall():
             dot_plot += f'<circle cx="{((d[0] - minx) * 600) / (maxx - minx)}" cy="{600 - (((d[1] - miny) * 600) / (maxy - miny))}" r="3" color="black"/>\n'
         dot_plot += '</svg></div>'
         dot_plot += '<h1 class="sel_counter">-</div>'
@@ -138,7 +145,7 @@ class Dot(Plot):
             ret += f' {self.color}, '
         if self.size is not None:
             ret += f' {self.size} '
-        ret += f"from '{self.data_alias}' "
+        ret += f"from {self.data_alias} "
         return ret
 
 class Line(Plot):
@@ -166,9 +173,19 @@ class Text(Plot):
         self.value = None
         self.data_source = None
         self.data_alias = None
+    def sql(self, db):
+        ret = f'select {self.value} '
+        assert self.value is not None, "VALUE needed for Text plot type"
+        if(self.x):
+            ret += f',{self.x}'
+        if(self.y):
+            ret += f',{self.y}'
+        ret += f' from {self.data_alias}'
+        return ret
     def html(self, db):
         sql = self.sql(db)
         res = db.sql(sql).fetchall()
+        print(f'format of count(*) response:{res[0][0].values()[0]}')
         ret = ''
         if(len(res[0]) == 1):
             for value in res:
@@ -179,14 +196,4 @@ class Text(Plot):
         elif(len(res[0]) == 3):
             ret = '<svg>'
             raise Exception("Double variable TEXT not implemented")
-        return ret
-
-    def sql(self, db):
-        ret = f'select {self.value} '
-        assert self.value is not None, "VALUE needed for Text plot type"
-        if(self.x):
-            ret += f',{self.x}'
-        if(self.y):
-            ret += f',{self.y}'
-        ret += f' from {self.data_alias}'
         return ret

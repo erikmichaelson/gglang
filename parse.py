@@ -67,20 +67,40 @@ def parse(db:duckdb.DuckDBPyConnection, text: str) -> {int: Plot}:
 
         elif l[0] == 'table':
             if(plt.plot_type is not None):
+                assert data_source is not None, "ERROR: no data source specified"
+                plt.data_source = data_source
+                assert data_alias is not None, "ERROR: no data alias specified"
+                plt.data_alias = data_alias
                 ret.update({PLOT_ID: plt})
+                PLOT_ID += 1
             plt = Table()
             print(f'table init called, {plt.plot_type}')
         elif l[0] == 'dot':
             if(plt.plot_type is not None):
+                assert data_source is not None, "ERROR: no data source specified"
+                plt.data_source = data_source
+                assert data_alias is not None, "ERROR: no data alias specified"
+                plt.data_alias = data_alias
                 ret.update({PLOT_ID: plt})
+                PLOT_ID += 1
             plt = Dot()
         elif l[0] == 'map':
             if(plt.plot_type is not None):
+                assert data_source is not None, "ERROR: no data source specified"
+                plt.data_source = data_source
+                assert data_alias is not None, "ERROR: no data alias specified"
+                plt.data_alias = data_alias
                 ret.update({PLOT_ID: plt})
+                PLOT_ID += 1
             plt = Map()
         elif l[0] == 'text':
             if(plt.plot_type is not None):
+                assert data_source is not None, "ERROR: no data source specified"
+                plt.data_source = data_source
+                assert data_alias is not None, "ERROR: no data alias specified"
+                plt.data_alias = data_alias
                 ret.update({PLOT_ID: plt})
+                PLOT_ID += 1
             plt = Text()
         elif l[0] == 'row':
             assert plt.plot_type == 'TABLE', f'plot type = {plt.plot_type}'
@@ -115,6 +135,7 @@ def parse(db:duckdb.DuckDBPyConnection, text: str) -> {int: Plot}:
     assert data_alias is not None, "ERROR: no data alias specified"
     plt.data_alias = data_alias
     ret.update({PLOT_ID: plt})
+    PLOT_ID += 1
     # "bind" a.k.a. enforce referential integrity
     exp_p  = db.sql("select regexp_extract_all(code, '.*\$\w+.*') from data where code ~ '.*\$\w+.*' ").fetchall()
     real_p = db.sql("select name from params;").fetchall()
