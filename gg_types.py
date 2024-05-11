@@ -14,10 +14,9 @@ def split_agg(value):
     return Agg_Value(value[0].upper(), value[1])
 
 class Plot():
-    def __init__(self, plot_type=None, data_source=None, data_alias=None):
+    def __init__(self, plot_type=None, data_name=None):
         self.plot_type = plot_type
-        self.data_source = data_source
-        self.data_alias = data_alias
+        self.data_name = data_name
     def html(self, db) -> str:
         raise Exception("ERROR: called on abstract class")
     def sql(self, db) -> str:
@@ -26,8 +25,7 @@ class Plot():
 class Map(Plot):
     def __init__(self, geometry=None, color=None, tooltip=None, limit=None):
         self.plot_type   = 'MAP'
-        self.data_source = None
-        self.data_alias  = None
+        self.data_name  = None
         self.geometry    = geometry
         self.color       = color
         self.tooltip     = tooltip
@@ -66,14 +64,13 @@ class Map(Plot):
         if self.color:
             ret += f',{color} '
         limit = f' limit {self.limit} ' if self.limit else ''
-        ret += f"from '{self.data_alias}' {limit}) to 'test.geojson' with (format gdal, driver geojson);"
+        ret += f"from '{self.data_name}' {limit}) to 'test.geojson' with (format gdal, driver geojson);"
         return ret
 
 class Table(Plot):
     def __init__(self, row=None, col=None, value=None):
         self.plot_type = 'TABLE'
-        self.data_source = None
-        self.data_alias = None
+        self.data_name = None
         self.row    = row
         self.col    = col
         self.value  = value
@@ -83,7 +80,7 @@ class Table(Plot):
         table_object += '<div class="res-container"></div></div>'
         return table_object
     def sql(self, db):
-        col_values = db.query(f"select distinct {self.col} from '{self.data_alias}'").fetchall()
+        col_values = db.query(f"select distinct {self.col} from '{self.data_name}'").fetchall()
         col_values = [c[0] for c in col_values]
         print(col_values)
         self.value = split_agg(self.value)
@@ -102,14 +99,13 @@ class Table(Plot):
             elif self.value.agg_func == 'MIN':
                 ret += f"min(case when {self.col} = '{cv}' then {self.value.ref} else 0 end) as '{cv}'"
             ret += ',\n' # duckdb is ok with trailing commas
-        ret += f"from '{self.data_alias}' group by {self.row}"
+        ret += f"from '{self.data_name}' group by {self.row}"
         return ret
 
 class Dot(Plot):
     def __init__(self, x=None, y=None, color=None, size=None):
         self.plot_type = 'DOT'
-        self.data_source = None
-        self.data_alias = None
+        self.data_name = None
         self.x = x
         self.y = y
         self.color = color
@@ -123,14 +119,8 @@ class Dot(Plot):
         #if self.params['name']:
         dot_plot += 'onmousemove="move_listener(event)" onmouseup="up_listener()"'
         dot_plot += '>'
-        # eventually I'd like this to "resolve" the source table automatically from the column reference, but until then...
-        param_source = ''
-        try:
-            param_source = self.x.split('.')[0]
-        except:
-            raise Exception("ERROR: you need to specify the data source name for each encoding")
         # if it errors out after this type cast we just let it. The user has to supply columns w/ correct data types
-        res = db.sql(f'select min({self.x}::float), max({self.x}::float), min({self.y}::float), max({self.y}::float) from {param_source}').fetchall()[0]
+        res = db.sql(f'select min({self.x}::float), max({self.x}::float), min({self.y}::float), max({self.y}::float) from {self.data_name}').fetchall()[0]
         print(res)
         minx, maxx, miny, maxy = res
         for d in db.sql(sql).fetchall():
@@ -145,7 +135,7 @@ class Dot(Plot):
             ret += f' {self.color}, '
         if self.size is not None:
             ret += f' {self.size} '
-        ret += f"from {self.data_alias} "
+        ret += f"from {self.data_name} "
         return ret
 
 class Line(Plot):
@@ -171,8 +161,7 @@ class Text(Plot):
         self.x = None
         self.y = None
         self.value = None
-        self.data_source = None
-        self.data_alias = None
+        self.data_name = None
     def sql(self, db):
         ret = f'select {self.value} '
         assert self.value is not None, "VALUE needed for Text plot type"
@@ -180,16 +169,16 @@ class Text(Plot):
             ret += f',{self.x}'
         if(self.y):
             ret += f',{self.y}'
-        ret += f' from {self.data_alias}'
+        ret += f' from {self.data_name}'
         return ret
     def html(self, db):
         sql = self.sql(db)
         res = db.sql(sql).fetchall()
-        print(f'format of count(*) response:{res[0][0].values()[0]}')
+        print(f'format of count(*) response:{res[0][0]}')
         ret = ''
         if(len(res[0]) == 1):
             for value in res:
-                ret += f'<h3 class="text">{res[0]}</h3>'
+                ret += f'<h3 class="text">{res[0][0]}</h3>'
         elif(len(res[0]) == 2):
             ret = '<svg>'
             raise Exception("Single variable TEXT not implemented")

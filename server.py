@@ -103,12 +103,13 @@ function move_listener(event) {
 function up_listener(param_name) {
     working_selector = null;
     var query = "update params set x0="+i_x+",x1="+f_x+",y0="+i_y+",y1="+f_y+" where name = " + param_name +";"
+    /*
     fetch('/query',
         method : 'POST',
         headers: {'message-type' : 'application/json'},
         body : json.stringify(param: param_name, v_vs: {first_x: x0, second_x: x1, first_y: y0, second_y: y1} )
     }).then((num) =>
-        document.getElementsByClassName('sel_counter')[0].innerHTML = num;)
+        document.getElementsByClassName('sel_counter')[0].innerHTML = num;) */
 }
 
 </script>
