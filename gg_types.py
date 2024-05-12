@@ -110,14 +110,15 @@ class Dot(Plot):
         self.y = y
         self.color = color
         self.size  = size
+        self.param = None
     def html(self, db):
         sql = self.sql(db)
         predicated = False
         if 'where' in sql:
             predicated = True
         dot_plot = f'<div><div class="query">{sql}</div><svg height="600" width="600" viewport="0 0 600 600"'
-        #if self.params['name']:
-        dot_plot += 'onmousemove="move_listener(event)" onmouseup="up_listener()"'
+        if self.param is not None:
+            dot_plot += f'onmousemove="move_listener(event)" onmouseup="up_listener(\'{self.param}\')"'
         dot_plot += '>'
         # if it errors out after this type cast we just let it. The user has to supply columns w/ correct data types
         res = db.sql(f'select min({self.x}::float), max({self.x}::float), min({self.y}::float), max({self.y}::float) from {self.data_name}').fetchall()[0]

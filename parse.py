@@ -152,6 +152,7 @@ def parse(db:duckdb.DuckDBPyConnection, text: str) -> {int: Plot}:
         #######  OTHER  #######
         elif l[0] == 'param':
             assert plt.plot_type is not None
+            plt.param = l[1]
             for i in range(2, len(l)):
                 # we assume these are numerical ranges for now
                 assert l[i] in ['x', 'y']

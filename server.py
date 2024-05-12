@@ -44,7 +44,7 @@ function invert_table(clicked_element) {
     console.log(query)
     fetch('/query', {
         method: "POST",
-        headers: { "Content-Type" : "application/json" },
+        headers: { "Content-type" : "application/json" },
         body: JSON.stringify(query),
     }).then(function(response) {
         return response.text();
@@ -58,7 +58,6 @@ function invert_table(clicked_element) {
 }
 
 function change_selected(element) {
-    console.log("change_selected called");
     if(selected) {
         selected.className = null;
         if(selected == element) {
@@ -77,18 +76,18 @@ var i_x, i_y, f_x, f_y;
 // take a streaming click event on a selector and draw a rectangle
 function move_listener(event) {
     if(event.buttons) {
-        f_x = event.x;
-        f_y = event.y;
-        console.log('(' + i_x + ',' + i_y +') -> (' + f_x + ',' + f_y +')');
+        f_x = event.pageX;
+        f_y = event.pageY;
         if(!working_selector) {
-            i_x = event.x;
-            i_y = event.y;
+            i_x = event.pageX;
+            i_y = event.pageY;
             var hlrect = event.target.getElementsByClassName('selector')[0];
             if(!hlrect) {
                 hlrect = document.createElementNS('http://www.w3.org/2000/svg','rect');
             }
             hlrect.setAttribute('fill', 'blue');
             hlrect.setAttribute('opacity', 0.7);
+            hlrect.setAttribute('class', 'selector');
             working_selector = hlrect;
             event.target.appendChild(hlrect);
         }
@@ -96,20 +95,20 @@ function move_listener(event) {
         working_selector.setAttribute('y', Math.min(f_y, i_y));
         working_selector.setAttribute('width',  Math.abs(f_x - i_x));
         working_selector.setAttribute('height', Math.abs(f_y - i_y));
-        working_selector.setAttribute('class', 'selector');
     }
 }
 
 function up_listener(param_name) {
     working_selector = null;
-    var query = "update params set x0="+i_x+",x1="+f_x+",y0="+i_y+",y1="+f_y+" where name = " + param_name +";"
-    /*
-    fetch('/query',
+    //var query = "update params set x0="+i_x+",x1="+f_x+",y0="+i_y+",y1="+f_y+" where name = " + param_name +";"
+    console.log(JSON.stringify({param: param_name, v_vs: {first_x: i_x, second_x: f_x, first_y: i_y, second_y: f_y}}));
+    fetch('/param_update_plots', {
         method : 'POST',
-        headers: {'message-type' : 'application/json'},
-        body : json.stringify(param: param_name, v_vs: {first_x: x0, second_x: x1, first_y: y0, second_y: y1} )
-    }).then((num) =>
-        document.getElementsByClassName('sel_counter')[0].innerHTML = num;) */
+        headers: {'Content-type' : 'application/json'},
+        body : JSON.stringify({param: param_name, v_vs: {first_x: i_x, second_x: f_x, first_y: i_y, second_y: f_y}} )
+    }).then((num) =>{
+        document.getElementsByClassName('sel_counter')[0].innerHTML = num;
+    })
 }
 
 </script>
@@ -138,16 +137,18 @@ conn = duckdb.connect(':memory:')
 def param_update_plots():
     req = request.get_json()
     print('param named',req['param'], '; v_vs', req['v_vs']);
-    streams = conn.sql(f"""select data_depedencies from params where param_name = '{req["param"]}' """).fetchall()
+    streams = conn.sql(f"""select data_dependencies from params where name = '{req["param"]}' """).fetchall()
     for s in streams:
         print(s)
         swapped_data_def = s[1].replace(f'${req["param"]}', f'${p_value}')
         dependencies = conn.sql("select plot_dependencies from data where data_alias = '{s}' ").fetchall()
         conn.sql(f"create or replace view {data_alias} as ({swapped_data_def}) ")
         global plots
-        for p in dependencies:
-            if p.id == '':
-                p.update()
+        for d in dependencies:
+            for p in plots:
+                if p.id == d:
+                    print(f'updating plot #{p.id}')
+    return "Hello"
 
 @app.route('/query', methods=['POST'])
 def query():
