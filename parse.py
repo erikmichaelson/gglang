@@ -101,6 +101,7 @@ def parse(db:duckdb.DuckDBPyConnection, text: str) -> {int: Plot}:
                 raise Exception("ERROR: you need to specify the data source name for each encoding")
             assert plt.data_name is None or plt.data_name == param_source, f"ERROR: all encodings in the same plot need to have same source {param_source} vs {plt.data_name}"
             plt.data_name = param_source
+            db.sql(f"update data set plot_dependencies = list_append(plot_dependencies, {PLOT_ID}) where name = '{param_source}' ")
             plt.row = l[1]
         elif l[0] == 'col':
             assert plt.plot_type == 'TABLE', f'plot type = {plt.plot_type}'
@@ -110,6 +111,7 @@ def parse(db:duckdb.DuckDBPyConnection, text: str) -> {int: Plot}:
                 raise Exception("ERROR: you need to specify the data source name for each encoding")
             assert plt.data_name is None or plt.data_name == param_source, f"ERROR: all encodings in the same plot need to have same source {param_source} vs {plt.data_name}"
             plt.data_name = param_source
+            db.sql(f"update data set plot_dependencies = list_append(plot_dependencies, {PLOT_ID}) where name = '{param_source}' ")
             plt.col = l[1]
         elif l[0] == 'geometry':
             assert plt.plot_type == 'MAP', f'plot type = {plt.plot_type}'
@@ -119,6 +121,7 @@ def parse(db:duckdb.DuckDBPyConnection, text: str) -> {int: Plot}:
                 raise Exception("ERROR: you need to specify the data source name for each encoding")
             assert plt.data_name is None or plt.data_name == param_source, f"ERROR: all encodings in the same plot need to have same source {param_source} vs {plt.data_name}"
             plt.data_name = param_source
+            db.sql(f"update data set plot_dependencies = list_append(plot_dependencies, {PLOT_ID}) where name = '{param_source}' ")
             plt.geometry = l[1]
         elif l[0] == 'value':
             assert plt.plot_type in ['TABLE','TEXT'], f'plot type = {plt.plot_type}'
@@ -128,6 +131,9 @@ def parse(db:duckdb.DuckDBPyConnection, text: str) -> {int: Plot}:
                 raise Exception("ERROR: you need to specify the data source name for each encoding")
             assert plt.data_name is None or plt.data_name == param_source, f"ERROR: all encodings in the same plot need to have same source {param_source} vs {plt.data_name}"
             plt.data_name = param_source
+            fail = db.sql(f"""update data set plot_dependencies = list_append(plot_dependencies, {PLOT_ID}) where name = '{param_source}'
+                            returning name, plot_dependencies""").fetchall()
+            assert len(fail) == 1, f"ERROR: cannot set plot as a datasource dependent {fail}"
             # for now all tables are pivot tables - split_agg is called in the sql() func
             plt.value = l[1]
         elif l[0] == 'x':
@@ -138,6 +144,7 @@ def parse(db:duckdb.DuckDBPyConnection, text: str) -> {int: Plot}:
                 raise Exception("ERROR: you need to specify the data source name for each encoding")
             assert plt.data_name is None or plt.data_name == param_source, f"ERROR: all encodings in the same plot need to have same source {param_source} vs {plt.data_name}"
             plt.data_name = param_source
+            db.sql(f"update data set plot_dependencies = list_append(plot_dependencies, {PLOT_ID}) where name = '{param_source}' ")
             plt.x = l[1]
         elif l[0] == 'y':
             assert plt.plot_type == 'DOT'
@@ -147,6 +154,7 @@ def parse(db:duckdb.DuckDBPyConnection, text: str) -> {int: Plot}:
                 raise Exception("ERROR: you need to specify the data source name for each encoding")
             assert plt.data_name is None or plt.data_name == param_source, f"ERROR: all encodings in the same plot need to have same source {param_source} vs {plt.data_name}"
             plt.data_name = param_source
+            db.sql(f"update data set plot_dependencies = list_append(plot_dependencies, {PLOT_ID}) where name = '{param_source}' ")
             plt.y = l[1]
 
         #######  OTHER  #######
@@ -156,27 +164,31 @@ def parse(db:duckdb.DuckDBPyConnection, text: str) -> {int: Plot}:
             for i in range(2, len(l)):
                 # we assume these are numerical ranges for now
                 assert l[i] in ['x', 'y']
-                db.sql(f"insert into params (name, variable, def) values ('{l[1]}', '{l[i]}min', {-sys.maxsize - 1});")
-                db.sql(f"insert into params (name, variable, def) values ('{l[1]}', '{l[i]}max', {sys.maxsize});")
+                db.sql(f"insert into params (name, variable, def) values ('{l[1]}', 'min{l[i]}', {-sys.maxsize - 1});")
+                db.sql(f"insert into params (name, variable, def) values ('{l[1]}', 'max{l[i]}', {sys.maxsize});")
         elif l[0] == 'limit':
             plt.limit = l[1]
 
     ret.update({PLOT_ID: plt})
     PLOT_ID += 1
     # "bind" a.k.a. enforce referential integrity
+    # TODO: fix this: do a left join instead of nested loop and use prepared statments
     exp_p  = db.sql("select regexp_extract_all(code, '.*\$\w+.*') from data where code ~ '.*\$\w+.*' ").fetchall()
     real_p = db.sql("select name from params;").fetchall()
-    data_strings = db.sql("select name, code from data").fetchall()
+    data_strings = db.sql("select name, code from data ").fetchall()
+    print(data_strings)
     for alias, code in data_strings:
         ps = re.findall('\$(\w+)\.(\w+)', code)
         if ps is not None:
+            print(ps)
             for p in ps:
+                db.sql(f"update params set data_dependencies = list_append(data_dependencies, '{alias}') where name = '{p[0]}' and variable = '{p[1]}' ")
                 # have to sub in defaults AND un-escape the code
                 d = db.sql(f"select def from params where name = '{p[0]}' and variable = '{p[1]}' ").fetchone()
                 code = code.replace(f'${p[0]}.{p[1]}', str(d[0])).replace("''", "'")
             print(f'bound (defaults filled code: create view {alias} as {code}')
-            db.sql(f'create view {alias} as {code}')
-        
+        db.sql(f'create view {alias} as {code}')
+
     print(f"params expected: {exp_p}, params in existance: {real_p}")
     # the real problem here would be if there's a used param which isn't registered.
     # if there's just an extra param we can ignore it and warn

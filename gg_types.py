@@ -74,8 +74,8 @@ class Table(Plot):
         self.row    = row
         self.col    = col
         self.value  = value
-    def html(self, db):
-        table_object = f'<div><div class="query">{self.sql(db)}</div>'
+    def html(self, db, _id):
+        table_object = f'<div id="{_id}"><div class="query">{self.sql(db)}</div>'
         table_object += db.sql(sql).pl()._repr_html_()
         table_object += '<div class="res-container"></div></div>'
         return table_object
@@ -106,23 +106,35 @@ class Dot(Plot):
     def __init__(self, x=None, y=None, color=None, size=None):
         self.plot_type = 'DOT'
         self.data_name = None
+        self.height = 600
+        self.width = 600
         self.x = x
         self.y = y
         self.color = color
         self.size  = size
         self.param = None
-    def html(self, db):
+    def invert_selection(self, db, variable, pixel:float) -> float:
+        # so wasteful lol. but premature optimization...
+        if variable == 'x':
+            minx, maxx = db.sql(f'select min({self.x}::float), max({self.x}::float) from {self.data_name}').fetchall()[0]
+            print(f'[inverter] var: {variable}, input: {pixel}, output: {pixel * ((maxx - minx) / self.width) + (((maxx - minx) / self.width) * minx)}')
+            return pixel * ((maxx - minx) / self.width) + (((maxx - minx) / self.width) * minx)
+        elif variable == 'y':
+            miny, maxy = db.sql(f'select min({self.y}::float), max({self.y}::float) from {self.data_name}').fetchall()[0]
+            return ((self.height - pixel) * ((maxy - miny) / self.height)) + (((maxy - miny) / self.height) * miny)
+        raise Exception("DOT can only invert x and y encodings")
+    def html(self, db, _id):
         sql = self.sql(db)
         predicated = False
         if 'where' in sql:
             predicated = True
-        dot_plot = f'<div><div class="query">{sql}</div><svg height="600" width="600" viewport="0 0 600 600"'
+        dot_plot = f'<div id="{_id}"><div class="query">{sql}</div><svg height="{self.height}" width="{self.width}" viewport="0 0 {self.height} {self.width}"'
         if self.param is not None:
-            dot_plot += f'onmousemove="move_listener(event)" onmouseup="up_listener(\'{self.param}\')"'
+            dot_plot += f'onmousemove="move_listener(event)" onmouseup="up_listener(event.target, \'{self.param}\')"'
         dot_plot += '>'
         # if it errors out after this type cast we just let it. The user has to supply columns w/ correct data types
         res = db.sql(f'select min({self.x}::float), max({self.x}::float), min({self.y}::float), max({self.y}::float) from {self.data_name}').fetchall()[0]
-        print(res)
+        #print(res)
         minx, maxx, miny, maxy = res
         for d in db.sql(sql).fetchall():
             dot_plot += f'<circle cx="{((d[0] - minx) * 600) / (maxx - minx)}" cy="{600 - (((d[1] - miny) * 600) / (maxy - miny))}" r="3" color="black"/>\n'
@@ -142,10 +154,10 @@ class Dot(Plot):
 class Line(Plot):
     def __init__(self):
         pass
-    def html(self):
+    def html(self, db, _id):
         sql = self.sql(db)
         predicated = False
-        line_plot = f'<div><div class="query">{sql}</div>'
+        line_plot = f'<div id="{_id}"><div class="query">{sql}</div>'
         if 'where' in sql:
             predicated = True
         if plot.params.name:
@@ -172,11 +184,11 @@ class Text(Plot):
             ret += f',{self.y}'
         ret += f' from {self.data_name}'
         return ret
-    def html(self, db):
+    def html(self, db, _id):
         sql = self.sql(db)
         res = db.sql(sql).fetchall()
         print(f'format of count(*) response:{res[0][0]}')
-        ret = ''
+        ret = f'<div id="{_id}">'
         if(len(res[0]) == 1):
             for value in res:
                 ret += f'<h3 class="text">{res[0][0]}</h3>'
@@ -186,4 +198,5 @@ class Text(Plot):
         elif(len(res[0]) == 3):
             ret = '<svg>'
             raise Exception("Double variable TEXT not implemented")
+        ret += '</div>'
         return ret

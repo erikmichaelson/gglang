@@ -4,6 +4,7 @@ import duckdb
 import parse
 import sys
 from gg_types import *
+import json
 
 app = Flask(__name__)
 
@@ -98,19 +99,24 @@ function move_listener(event) {
     }
 }
 
-function up_listener(param_name) {
+function up_listener(target, param_name) {
     working_selector = null;
     //var query = "update params set x0="+i_x+",x1="+f_x+",y0="+i_y+",y1="+f_y+" where name = " + param_name +";"
-    console.log(JSON.stringify({param: param_name, v_vs: {first_x: i_x, second_x: f_x, first_y: i_y, second_y: f_y}}));
+    console.log(JSON.stringify({plot_id: target.parentElement.parentElement.id, param: param_name, v_vs: {minx: i_x, maxx: f_x, miny: i_y, maxy: f_y}}));
     fetch('/param_update_plots', {
         method : 'POST',
         headers: {'Content-type' : 'application/json'},
-        body : JSON.stringify({param: param_name, v_vs: {first_x: i_x, second_x: f_x, first_y: i_y, second_y: f_y}} )
-    }).then((num) =>{
-        document.getElementsByClassName('sel_counter')[0].innerHTML = num;
+        // assuming that the start click point is lower left than the final... I think "between" will fix this later
+        body : JSON.stringify({plot_id:target.parentElement.parentElement.id, param: param_name, v_vs: {minx: i_x, maxx: f_x, miny: i_y, maxy: f_y}} )
+    }).then((res) =>{
+        return res.json();
+    }).then((pairs) => {
+        // we expect res to be a map of {id:html} pairs 
+        pairs.map((p) => {
+            document.getElementById(p.plot_id).innerHTML = p.html;
+        });
     })
 }
-
 </script>
 <style>
 .query {
@@ -130,25 +136,38 @@ function up_listener(param_name) {
 }
 </style>'''
 
-plots = []
+plots = {}
 conn = duckdb.connect(':memory:')
 
 @app.route('/param_update_plots', methods=['POST'])
-def param_update_plots():
+def param_update_plots() -> [{}]:
     req = request.get_json()
     print('param named',req['param'], '; v_vs', req['v_vs']);
     streams = conn.sql(f"""select data_dependencies from params where name = '{req["param"]}' """).fetchall()
+    streams = set([f"'{r[0]}'" for r in [row[0] for row in streams]])
+    print(streams)
+    streams = conn.sql(f"""select name, code from data where name in ({",".join(streams)})""").fetchall()
+    global plots
+    # plot id, new html pairs
+    ret = []
     for s in streams:
         print(s)
-        swapped_data_def = s[1].replace(f'${req["param"]}', f'${p_value}')
-        dependencies = conn.sql("select plot_dependencies from data where data_alias = '{s}' ").fetchall()
-        conn.sql(f"create or replace view {data_alias} as ({swapped_data_def}) ")
-        global plots
-        for d in dependencies:
-            for p in plots:
-                if p.id == d:
-                    print(f'updating plot #{p.id}')
-    return "Hello"
+        swapped_data_def = s[1]
+        for vv in req['v_vs']:
+            #print(vv, req['v_vs'][vv], f'${req["param"]}.{vv}')
+            translated_value = plots[int(req['plot_id'])].invert_selection(conn, vv[-1], req["v_vs"][vv])
+            swapped_data_def = swapped_data_def.replace(f'${req["param"]}.{vv}', f'{translated_value}')
+        print(conn.sql(swapped_data_def))
+        conn.sql(f"create or replace view {s[0]} as ({swapped_data_def}) ")
+        dependencies = conn.sql(f"select plot_dependencies from data where name = '{s[0]}' ").fetchall()[0][0]
+        print('plot dependencies', dependencies)
+        for p in plots:
+            for d in dependencies:
+                if p == d:
+                    print(f'updating plot #{p}')
+                    ret.append({'plot_id':p , 'html':plots[p].html(conn, str(p))})
+    print(ret)
+    return json.dumps(ret)
 
 @app.route('/query', methods=['POST'])
 def query():
@@ -165,8 +184,8 @@ if __name__ == '__main__':
     print("params still visibile back in server main:", conn.sql("select distinct name from params;").fetchall())
     print("data still visibile back in server main:", conn.sql("select distinct name from data;").fetchall())
     print(len(plots), 'plots displaying')
-    for p in plots.values():
-        sql = p.sql(conn)
+    for p in plots:
+        sql = plots[p].sql(conn)
         print(sql)
-        HTML += p.html(conn)
+        HTML += plots[p].html(conn, p)
     app.run()
