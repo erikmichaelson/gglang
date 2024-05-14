@@ -157,7 +157,7 @@ def param_update_plots() -> [{}]:
             #print(vv, req['v_vs'][vv], f'${req["param"]}.{vv}')
             translated_value = plots[int(req['plot_id'])].invert_selection(conn, vv[-1], req["v_vs"][vv])
             swapped_data_def = swapped_data_def.replace(f'${req["param"]}.{vv}', f'{translated_value}')
-        print(conn.sql(swapped_data_def))
+        print(swapped_data_def)
         conn.sql(f"create or replace view {s[0]} as ({swapped_data_def}) ")
         dependencies = conn.sql(f"select plot_dependencies from data where name = '{s[0]}' ").fetchall()[0][0]
         print('plot dependencies', dependencies)

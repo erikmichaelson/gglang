@@ -168,6 +168,9 @@ def parse(db:duckdb.DuckDBPyConnection, text: str) -> {int: Plot}:
                 db.sql(f"insert into params (name, variable, def) values ('{l[1]}', 'max{l[i]}', {sys.maxsize});")
         elif l[0] == 'limit':
             plt.limit = l[1]
+        elif l[0] == 'ticks':
+            # format [{number of x ticks}, {number of y ticks}]
+            plt.ticks = l[1]
 
     ret.update({PLOT_ID: plt})
     PLOT_ID += 1
