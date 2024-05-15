@@ -75,13 +75,9 @@ var working_selector;
 var i_x, i_y, f_x, f_y;
 
 // take a streaming click event on a selector and draw a rectangle
-function move_listener(event) {
+function move_listener(event, x, y) {
     if(event.buttons) {
-        f_x = event.pageX;
-        f_y = event.pageY;
         if(!working_selector) {
-            i_x = event.pageX;
-            i_y = event.pageY;
             var hlrect = event.target.getElementsByClassName('selector')[0];
             if(!hlrect) {
                 hlrect = document.createElementNS('http://www.w3.org/2000/svg','rect');
@@ -92,22 +88,43 @@ function move_listener(event) {
             working_selector = hlrect;
             event.target.appendChild(hlrect);
         }
-        working_selector.setAttribute('x', Math.min(f_x, i_x));
-        working_selector.setAttribute('y', Math.min(f_y, i_y));
-        working_selector.setAttribute('width',  Math.abs(f_x - i_x));
-        working_selector.setAttribute('height', Math.abs(f_y - i_y));
+        if(x) {
+            if(!i_x) {
+                i_x = event.pageX;
+            }
+            if(!y) {
+                working_selector.setAttribute('height', working_selector.parentElement.height.animVal.value);
+            }
+            f_x = event.pageX;
+            working_selector.setAttribute('x', Math.min(f_x, i_x));
+            working_selector.setAttribute('width',  Math.abs(f_x - i_x));
+        }
+        if(y) {
+            if(!i_y) {
+                i_y = event.pageY;
+            }
+            if(!x) {
+                working_selector.setAttribute('width', working_selector.parentElement.width.animVal.value);
+            }
+            f_y = event.pageY;
+            working_selector.setAttribute('y', Math.min(f_y, i_y));
+            working_selector.setAttribute('height', Math.abs(f_y - i_y));
+        }
     }
 }
 
-function up_listener(target, param_name) {
-    working_selector = null;
-    //var query = "update params set x0="+i_x+",x1="+f_x+",y0="+i_y+",y1="+f_y+" where name = " + param_name +";"
-    console.log(JSON.stringify({plot_id: target.parentElement.parentElement.id, param: param_name, v_vs: {minx: i_x, maxx: f_x, miny: i_y, maxy: f_y}}));
+function up_listener(target, param_name, x, y) {
+    var vardict = {};
+    if(x) { vardict['minx'] = Math.min(i_x,f_x); vardict['maxx'] = Math.max(i_x,f_x); }
+    if(y) {
+        var height = working_selector.parentElement.height.animVal.value;
+        vardict['miny'] = (height - Math.max(i_y,f_y));
+        vardict['maxy'] = (height - Math.min(i_y,f_y));
+    }
     fetch('/param_update_plots', {
         method : 'POST',
         headers: {'Content-type' : 'application/json'},
-        // assuming that the start click point is lower left than the final... I think "between" will fix this later
-        body : JSON.stringify({plot_id:target.parentElement.parentElement.id, param: param_name, v_vs: {minx: i_x, maxx: f_x, miny: i_y, maxy: f_y}} )
+        body : JSON.stringify({plot_id:working_selector.parentElement.parentElement.id, param: param_name, v_vs: vardict} )
     }).then((res) =>{
         return res.json();
     }).then((pairs) => {
@@ -116,9 +133,21 @@ function up_listener(target, param_name) {
             document.getElementById(p.plot_id).innerHTML = p.html;
         });
     })
+    working_selector = null;
+    i_x = null;
+    f_x = null;
+    i_y = null;
+    f_y = null;
 }
 </script>
 <style>
+svg circle {
+    user-select: none;
+    mouse-events: none;
+}
+svg text{
+    user-select: None;
+}
 .query {
     visibility:hidden;
     height: 0;
@@ -156,6 +185,7 @@ def param_update_plots() -> [{}]:
         for vv in req['v_vs']:
             #print(vv, req['v_vs'][vv], f'${req["param"]}.{vv}')
             translated_value = plots[int(req['plot_id'])].invert_selection(conn, vv[-1], req["v_vs"][vv])
+            print(req["param"]+'.'+vv +':'+str(translated_value))
             swapped_data_def = swapped_data_def.replace(f'${req["param"]}.{vv}', f'{translated_value}')
         print(swapped_data_def)
         conn.sql(f"create or replace view {s[0]} as ({swapped_data_def}) ")

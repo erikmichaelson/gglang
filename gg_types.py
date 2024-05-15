@@ -1,4 +1,5 @@
 import duckdb
+import json
 
 class Agg_Value():
     def __init__(self, agg_func, ref):
@@ -117,12 +118,14 @@ class Dot(Plot):
     def invert_selection(self, db, variable, pixel:float) -> float:
         # so wasteful lol. but premature optimization...
         if variable == 'x':
+            offset = 50 if self.ticks[0] != 0 else 0
             minx, maxx = db.sql(f'select min({self.x}::float), max({self.x}::float) from {self.data_name}').fetchall()[0]
             print(f'[inverter] var: {variable}, input: {pixel}, output: {pixel * ((maxx - minx) / self.width) + (((maxx - minx) / self.width) * minx)}')
-            return pixel * ((maxx - minx) / self.width) + minx
+            return (pixel + offset) * ((maxx - minx) / self.width) + minx
         elif variable == 'y':
+            offset = 15 if self.ticks[0] != 0 else 0
             miny, maxy = db.sql(f'select min({self.y}::float), max({self.y}::float) from {self.data_name}').fetchall()[0]
-            return ((self.height - pixel) * ((maxy - miny) / self.height)) + miny
+            return ((pixel + offset) * ((maxy - miny) / self.height)) + miny
         raise Exception("DOT can only invert x and y encodings")
     def html(self, db, _id):
         sql = self.sql(db)
@@ -131,19 +134,21 @@ class Dot(Plot):
             viewport = (viewport[0] + 50, viewport[1] + 15)
         dot_plot = f'<div id="{_id}"><div class="query">{sql}</div><svg height="{viewport[1]}" width="{viewport[0]}" viewport="0 0 {viewport[1]} {viewport[0]}"'
         if self.param is not None:
-            dot_plot += f'onmousemove="move_listener(event)" onmouseup="up_listener(event.target, \'{self.param}\')"'
+            x = 1 if 'x' in self.param['variables'] else 0
+            y = 1 if 'y' in self.param['variables'] else 0
+            dot_plot += f'''onmousemove="move_listener(event,{x},{y})" onmouseup="up_listener(event.target,'{self.param['name']}', {x}, {y})"'''
         dot_plot += '>'
         # if it errors out after this type cast we just let it. The user has to supply columns w/ correct data types
         res = db.sql(f'select min({self.x}::float), max({self.x}::float), min({self.y}::float), max({self.y}::float) from {self.data_name}').fetchall()[0]
         minx, maxx, miny, maxy = res
         print(minx, maxx, miny, maxy)
         for d in db.sql(sql).fetchall():
-            dot_plot += f'<circle transform="translate({50}, {15})" cx="{((d[0] - minx) * self.height) / (maxx - minx)}" cy="{600 - (((d[1] - miny) * 600) / (maxy - miny))}" r="2" color="black"/>\n'
+            dot_plot += f'<circle transform="translate({50}, {-15})" cx="{((d[0] - minx) * self.height) / (maxx - minx)}" cy="{600 - (((d[1] - miny) * 600) / (maxy - miny))}" r="2" color="black"/>\n'
         if self.ticks is not None:
             for xt in range(0, self.width + 50,  int(self.width / self.ticks[0])):
-                dot_plot += f'<text x="{xt}" y="{self.height + 15}">{(xt * ((maxx - minx) / self.width)) + minx}</text>'
+                dot_plot += f'<text class="tickMark" x="{xt}" y="{self.height + 15}">{(xt * ((maxx - minx) / self.width)) + minx}</text>'
             for yt in range(0, self.height + 50, int(self.height / self.ticks[1])):
-                dot_plot += f'<text x="0" y="{self.height - yt}">{(yt * ((maxy - miny) / self.height)) + miny}</text>'
+                dot_plot += f'<text class="tickMark" x="0" y="{self.height - yt}">{(yt * ((maxy - miny) / self.height)) + miny}</text>'
         dot_plot += '</svg></div>'
         dot_plot += '<h1 class="sel_counter">-</div>'
         return dot_plot

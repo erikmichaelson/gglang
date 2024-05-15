@@ -160,7 +160,7 @@ def parse(db:duckdb.DuckDBPyConnection, text: str) -> {int: Plot}:
         #######  OTHER  #######
         elif l[0] == 'param':
             assert plt.plot_type is not None
-            plt.param = l[1]
+            plt.param = {'name':l[1] , 'variables': l[2:]}
             for i in range(2, len(l)):
                 # we assume these are numerical ranges for now
                 assert l[i] in ['x', 'y']
@@ -188,7 +188,12 @@ def parse(db:duckdb.DuckDBPyConnection, text: str) -> {int: Plot}:
                 db.sql(f"update params set data_dependencies = list_append(data_dependencies, '{alias}') where name = '{p[0]}' and variable = '{p[1]}' ")
                 # have to sub in defaults AND un-escape the code
                 d = db.sql(f"select def from params where name = '{p[0]}' and variable = '{p[1]}' ").fetchone()
-                code = code.replace(f'${p[0]}.{p[1]}', str(d[0])).replace("''", "'")
+                # again, "anti-pattern" when I could just check my returns
+                try:
+                    code = code.replace(f'${p[0]}.{p[1]}', str(d[0])).replace("''", "'")
+                except:
+                    print("USER ERROR: data expression depends on a parameter variable that doesn't exist")
+                    exit()
             print(f'bound (defaults filled code: create view {alias} as {code}')
         db.sql(f'create view {alias} as {code}')
 

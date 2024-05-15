@@ -1,10 +1,10 @@
 data (select row_number() over () as id, * from '../data/metrics_project/actually.shp' limit 1000) econ
-data (select count(*)::float as pct_in_sel from econ where econ.LandValue between $amt.minx and $amt.maxx) price_range 
+data (select count(*)::float as pct_in_sel from econ where econ.BuildValue between $amt.miny and $amt.maxy and econ.LandValue between $amt.minx and $amt.maxx) price_range 
 
 dot
     x econ.LandValue
     y econ.BuildValue
-    param amt x
+    param amt x y
 
 text
     value price_range.pct_in_sel
