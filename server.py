@@ -172,10 +172,15 @@ conn = duckdb.connect(':memory:')
 def param_update_plots() -> [{}]:
     req = request.get_json()
     print('param named',req['param'], '; v_vs', req['v_vs']);
-    streams = conn.sql(f"""select data_dependencies from params where name = '{req["param"]}' """).fetchall()
-    streams = set([f"'{r[0]}'" for r in [row[0] for row in streams]])
+    streams = conn.sql(f"""select distinct data_dependencies from params where name = '{req["param"]}' """).fetchall()
     print(streams)
-    streams = conn.sql(f"""select name, code from data where name in ({",".join(streams)})""").fetchall()
+    streams = set([j for i in [s[0] for s in streams] for j in i])
+    streams = [f"'{i}'" for i in streams]
+    print(streams)
+    try:
+        streams = conn.sql(f"""select name, code from data where name in ({",".join(streams)})""").fetchall()
+    except:
+        print(f"errored trying to query 'select name, code from data where name in ({','.join(streams)})' ")
     global plots
     # plot id, new html pairs
     ret = []
@@ -211,8 +216,8 @@ def index():
 if __name__ == '__main__':
     # the database stores all of the parsed params and streams needed at runtime
     plots = parse.parse(conn, open(sys.argv[1]).read())
-    print("params still visibile back in server main:", conn.sql("select distinct name from params;").fetchall())
-    print("data still visibile back in server main:", conn.sql("select distinct name from data;").fetchall())
+    print("params still visibile back in server main:", conn.sql("select distinct name, data_dependencies from params;").fetchall())
+    print("data still visibile back in server main:", conn.sql("select distinct name, plot_dependencies from data;").fetchall())
     print(len(plots), 'plots displaying')
     for p in plots:
         sql = plots[p].sql(conn)

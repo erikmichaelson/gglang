@@ -77,30 +77,43 @@ class Table(Plot):
         self.value  = value
     def html(self, db, _id):
         table_object = f'<div id="{_id}"><div class="query">{self.sql(db)}</div>'
-        table_object += db.sql(sql).pl()._repr_html_()
+        table_object += db.sql(self.sql(db)).pl()._repr_html_()
         table_object += '<div class="res-container"></div></div>'
         return table_object
     def sql(self, db):
-        col_values = db.query(f"select distinct {self.col} from '{self.data_name}'").fetchall()
-        col_values = [c[0] for c in col_values]
-        print(col_values)
-        self.value = split_agg(self.value)
-        ret = f'select {self.row},\n'
-        for cv in col_values:
-            if self.value.agg_func == 'COUNT':
-                ret += f"sum(case when {self.col} = '{cv}' then 1 else 0 end) as '{cv}'"
-            elif self.value.agg_func == 'SUM':
-                #assert col_type in ['FLOAT', 'NUMERIC', 'INT']
-                ret += f"sum(case when {self.col} = '{cv}' then {self.value.ref} else 0 end) as '{cv}'"
-            elif self.value.agg_func == 'AVG':
-                #assert col_type in ['FLOAT', 'NUMERIC', 'INT']
-                ret += f"avg(case when {self.col} = '{cv}' then {self.value.ref} else 0 end) as '{cv}'"
-            elif self.value.agg_func == 'MAX':
-                ret += f"max(case when {self.col} = '{cv}' then {self.value.ref} else 0 end) as '{cv}'"
-            elif self.value.agg_func == 'MIN':
-                ret += f"min(case when {self.col} = '{cv}' then {self.value.ref} else 0 end) as '{cv}'"
-            ret += ',\n' # duckdb is ok with trailing commas
-        ret += f"from '{self.data_name}' group by {self.row}"
+        ret = ''
+        # need to determine if the table should be a pivot or a raw info
+        # non-pivot criteria
+        if self.row is None and self.col is None:
+            ret = 'select '
+            data = ''
+            for v in self.value:
+                #print(v)
+                v = v.split('.')
+                data = v[0]
+                ret += f'{v[1]},'
+            ret += f' from {data}'
+        else:
+            col_values = db.query(f"select distinct {self.col} from '{self.data_name}'").fetchall()
+            col_values = [c[0] for c in col_values]
+            #print(col_values)
+            self.value = split_agg(self.value)
+            ret = f'select {self.row},\n'
+            for cv in col_values:
+                if self.value.agg_func == 'COUNT':
+                    ret += f"sum(case when {self.col} = '{cv}' then 1 else 0 end) as '{cv}'"
+                elif self.value.agg_func == 'SUM':
+                    #assert col_type in ['FLOAT', 'NUMERIC', 'INT']
+                    ret += f"sum(case when {self.col} = '{cv}' then {self.value.ref} else 0 end) as '{cv}'"
+                elif self.value.agg_func == 'AVG':
+                    #assert col_type in ['FLOAT', 'NUMERIC', 'INT']
+                    ret += f"avg(case when {self.col} = '{cv}' then {self.value.ref} else 0 end) as '{cv}'"
+                elif self.value.agg_func == 'MAX':
+                    ret += f"max(case when {self.col} = '{cv}' then {self.value.ref} else 0 end) as '{cv}'"
+                elif self.value.agg_func == 'MIN':
+                    ret += f"min(case when {self.col} = '{cv}' then {self.value.ref} else 0 end) as '{cv}'"
+                ret += ',\n' # duckdb is ok with trailing commas
+            ret += f"from '{self.data_name}' group by {self.row}"
         return ret
 
 class Dot(Plot):
@@ -120,7 +133,7 @@ class Dot(Plot):
         if variable == 'x':
             offset = 50 if self.ticks[0] != 0 else 0
             minx, maxx = db.sql(f'select min({self.x}::float), max({self.x}::float) from {self.data_name}').fetchall()[0]
-            print(f'[inverter] var: {variable}, input: {pixel}, output: {pixel * ((maxx - minx) / self.width) + (((maxx - minx) / self.width) * minx)}')
+            #print(f'[inverter] var: {variable}, input: {pixel}, output: {pixel * ((maxx - minx) / self.width) + (((maxx - minx) / self.width) * minx)}')
             return (pixel + offset) * ((maxx - minx) / self.width) + minx
         elif variable == 'y':
             offset = 15 if self.ticks[0] != 0 else 0
@@ -141,7 +154,7 @@ class Dot(Plot):
         # if it errors out after this type cast we just let it. The user has to supply columns w/ correct data types
         res = db.sql(f'select min({self.x}::float), max({self.x}::float), min({self.y}::float), max({self.y}::float) from {self.data_name}').fetchall()[0]
         minx, maxx, miny, maxy = res
-        print(minx, maxx, miny, maxy)
+        #print(minx, maxx, miny, maxy)
         for d in db.sql(sql).fetchall():
             dot_plot += f'<circle transform="translate({50}, {-15})" cx="{((d[0] - minx) * self.height) / (maxx - minx)}" cy="{600 - (((d[1] - miny) * 600) / (maxy - miny))}" r="2" color="black"/>\n'
         if self.ticks is not None:
@@ -150,7 +163,6 @@ class Dot(Plot):
             for yt in range(0, self.height + 50, int(self.height / self.ticks[1])):
                 dot_plot += f'<text class="tickMark" x="0" y="{self.height - yt}">{(yt * ((maxy - miny) / self.height)) + miny}</text>'
         dot_plot += '</svg></div>'
-        dot_plot += '<h1 class="sel_counter">-</div>'
         return dot_plot
     def sql(self, db):
         ret = f'select {self.x}, {self.y},'
@@ -186,7 +198,7 @@ class Text(Plot):
         self.value = None
         self.data_name = None
     def sql(self, db):
-        ret = f'select {self.value} '
+        ret = f'select {self.value[0]} '
         assert self.value is not None, "VALUE needed for Text plot type"
         if(self.x):
             ret += f',{self.x}'
@@ -197,7 +209,7 @@ class Text(Plot):
     def html(self, db, _id):
         sql = self.sql(db)
         res = db.sql(sql).fetchall()
-        print(f'format of count(*) response:{res[0][0]}')
+        #print(f'format of count(*) response:{res[0][0]}')
         ret = f'<div id="{_id}">'
         if(len(res[0]) == 1):
             for value in res:

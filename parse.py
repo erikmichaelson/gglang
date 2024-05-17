@@ -13,7 +13,17 @@ def lex(line: str) -> [str]:
     start = 0
     last_char = None
     for i,c in enumerate(line):
-        if c == '(':
+        if c == '[':
+            if depth == 0:
+                start = i
+            depth += 1
+        elif c == ']':
+            depth -= 1
+            assert depth >= 0, f"ERROR: unmatched ']' character # {i} : {c}"
+            if depth == 0:
+                ret.append(line[start:i+1])
+                start = i + 1
+        elif c == '(':
             if depth == 0:
                 start = i
             depth += 1
@@ -30,7 +40,8 @@ def lex(line: str) -> [str]:
                 start = i
         last_char = c
     # get the last word in there
-    ret.append(line[start:])
+    if start != len(line):
+        ret.append(line[start:])
     return ret
 
 # parse messes with the database but the caller keeps a pointer to it
@@ -125,16 +136,28 @@ def parse(db:duckdb.DuckDBPyConnection, text: str) -> {int: Plot}:
             plt.geometry = l[1]
         elif l[0] == 'value':
             assert plt.plot_type in ['TABLE','TEXT'], f'plot type = {plt.plot_type}'
-            try:
-                param_source = l[1].split('.')[0]
-            except:
-                raise Exception("ERROR: you need to specify the data source name for each encoding")
-            assert plt.data_name is None or plt.data_name == param_source, f"ERROR: all encodings in the same plot need to have same source {param_source} vs {plt.data_name}"
-            plt.data_name = param_source
-            fail = db.sql(f"""update data set plot_dependencies = list_append(plot_dependencies, {PLOT_ID}) where name = '{param_source}'
-                            returning name, plot_dependencies""").fetchall()
-            assert len(fail) == 1, f"ERROR: cannot set plot as a datasource dependent {fail}"
-            # for now all tables are pivot tables - split_agg is called in the sql() func
+            # value can now either be a list or a single value
+            # eval is hideously unsafe lol
+            str_list = []
+            if l[1][0] == '[' and l[1][-1] == ']':
+                assert plt.plot_type == 'TABLE', f'only TABLE types can have list values (plot_type = {plt.plot_type})'
+                l[1] = l[1][1:-1]
+                str_list = [s.strip() for s in l[1].split(',')]
+            else:
+                str_list.append(l[1])
+            l[1] = str_list
+            print(l[1])
+            for value in l[1]:
+                print(value)
+                try:
+                    param_source = value.split('.')[0]
+                except:
+                    raise Exception("ERROR: you need to specify the data source name for each encoding")
+                assert plt.data_name is None or plt.data_name == param_source, f"ERROR: all encodings in the same plot need to have same source {param_source} vs {plt.data_name}"
+                plt.data_name = param_source
+                fail = db.sql(f"""update data set plot_dependencies = list_append(plot_dependencies, {PLOT_ID}) where name = '{param_source}'
+                                returning name, plot_dependencies""").fetchall()
+                assert len(fail) == 1, f"ERROR: cannot set plot as a datasource dependent {fail}"
             plt.value = l[1]
         elif l[0] == 'x':
             assert plt.plot_type == 'DOT'
