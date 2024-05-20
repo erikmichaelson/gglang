@@ -13,40 +13,67 @@ HTML =  '''
 window.onload = (() => {
     var data = document.getElementsByTagName("td");
     for(const d of data) {
-        d.addEventListener("click", (d) => {return invert_table(d.srcElement);} );
+        d.addEventListener("click", (d) => {return table_click_listener(d.srcElement, );} );
     }
 });
 
 var selected;
-function invert_table(clicked_element) {
-    change_selected(clicked_element);
-    if(!selected) {
-        return;
+function table_click_listener(clicked_element, param_name, row, col) {
+    const pid = clicked_element.parentElement.parentElement.parentElement.parentElement.parentElement;
+    if(selected) {
+        selected.className = null;
+        if(selected == clicked_element) {
+            document.getElementsByClassName("res-container")[0].innerHTML = null;
+            selected = null;
+            // TODO: send HTTP to flask to clear the selector
+            fetch('/param_update_plots', {
+                method: "POST",
+                headers: { "Content-type" : "application/json" },
+                body: JSON.stringify({plot_id: pid, name: param_name, v_vs:{pk: None}});
+            })
+            return;
+        }
     }
-    // get the first element - this is the row-pivoted "groupby" value
-    row_value = clicked_element.parentElement.children[0].innerHTML.replaceAll('"','')
-    // *should* assert this is a <th> and the thing was written right
-    col_value = clicked_element.parentElement.parentElement.children[0].innerHTML
-
+    selected = clicked_element;
+    // if we're only tracking rows then we highlight the whole row
+    // and accept clicks on the whole row to null the selection
+    if (!col) { selected = selected.parentElement; }
+    selected.className = "highlighted";
+    /*if(!selected) {
+        return;
+    } pretty sure this is dead code*/
     og_query = clicked_element.parentElement.parentElement.parentElement.parentElement.parentElement.firstChild.innerHTML
 
-    col_query = og_query.split(',')[clicked_element.cellIndex]
-    if(clicked_element.cellIndex == 0) {
-        col_query = col_query.substr(7) // removes 'select\\n'
+    // get the first element - this is the row-pivoted "groupby" value
+    row_value = clicked_element.parentElement.children[0].innerHTML.replaceAll('"','')
+    // we use col being set in the param as a proxy for being a pivot table
+    // same as in gg_types. This is janky and will be fixed
+    if(col) {
+        // *should* assert this is a <th> and the thing was written right
+        col_value = clicked_element.parentElement.parentElement.children[0].innerHTML
+
+        col_query = og_query.split(',')[clicked_element.cellIndex]
+        if(clicked_element.cellIndex == 0) {
+            col_query = col_query.substr(7) // removes 'select\\n'
+        }
+        var re = /group by (\w+)/
+        const rows = re.exec(og_query)[1]
+        // first "match" is always the full thing
+        re = /(sum|avg|min|max)\(case when (\w+) = (['|\w]+) then (\w+) else 0 end\)/
+        res = re.exec(col_query) 
     }
-    var re = /group by (\w+)/
-    const rows = re.exec(og_query)[1]
-    // first "match" is always the full thing
-    re = /(sum|avg|min|max)\(case when (\w+) = (['|\w]+) then (\w+) else 0 end\)/
-    res = re.exec(col_query) 
     re = /from ([\.|'|/|\w]+)/
     data_source = re.exec(og_query)[1]
-    const query = 'select * from '+data_source+' where '+res[2]+' = '+res[3]+' and '+rows+" = '"+row_value+"'"
-    console.log(query)
-    fetch('/query', {
+    //const query = 'select * from '+data_source+' where '+res[2]+' = '+res[3]+' and '+rows+" = '"+row_value+"'"
+    //console.log(query)
+    var vardict = {}
+    if(row_param) {
+        
+    }
+    fetch('/param_update_plots', {
         method: "POST",
         headers: { "Content-type" : "application/json" },
-        body: JSON.stringify(query),
+        body: JSON.stringify({name:param_name, , vardict}),
     }).then(function(response) {
         return response.text();
     }).then(function(HTML) {
@@ -59,23 +86,13 @@ function invert_table(clicked_element) {
 }
 
 function change_selected(element) {
-    if(selected) {
-        selected.className = null;
-        if(selected == element) {
-            document.getElementsByClassName("res-container")[0].innerHTML = null;
-            selected = null;
-            return;
-        }
-    }
-    selected = element;
-    selected.className = "highlighted";
 }
 
 var working_selector;
 var i_x, i_y, f_x, f_y;
 
-// take a streaming click event on a selector and draw a rectangle
-function move_listener(event, x, y) {
+// take a click event on a selector and draw a rectangle
+function interval_move_listener(event, x, y) {
     if(event.buttons) {
         if(!working_selector) {
             var hlrect = event.target.getElementsByClassName('selector')[0];
@@ -113,7 +130,7 @@ function move_listener(event, x, y) {
     }
 }
 
-function up_listener(target, param_name, x, y) {
+function interval_up_listener(target, param_name, x, y) {
     var vardict = {};
     if(x) { vardict['minx'] = Math.min(i_x,f_x); vardict['maxx'] = Math.max(i_x,f_x); }
     if(y) {
@@ -130,7 +147,7 @@ function up_listener(target, param_name, x, y) {
     }).then((pairs) => {
         // we expect res to be a map of {id:html} pairs 
         pairs.map((p) => {
-            document.getElementById(p.plot_id).innerHTML = p.html;
+            document.getElementById(p.plot_id).outerHTML = p.html;
         });
     })
     working_selector = null;
@@ -200,7 +217,7 @@ def param_update_plots() -> [{}]:
             for d in dependencies:
                 if p == d:
                     print(f'updating plot #{p}')
-                    ret.append({'plot_id':p , 'html':plots[p].html(conn, str(p))})
+                    #ret.append({'plot_id':p , 'html':plots[p].html(conn, str(p))})
     print(ret)
     return json.dumps(ret)
 

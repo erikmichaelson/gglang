@@ -5,6 +5,7 @@ data (select CityName, SchoolDist, YearBuilt from econ where econ.BuildValue bet
 dot
     x econ.LandValue
     y econ.BuildValue
+    color $indv.PK
     param amt x y
 
 text
@@ -12,3 +13,4 @@ text
 
 table
     value [si.CityName, si.SchoolDist, si.YearBuilt]
+    param indv row

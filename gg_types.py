@@ -80,6 +80,13 @@ class Table(Plot):
         table_object += db.sql(self.sql(db)).pl()._repr_html_()
         table_object += '<div class="res-container"></div></div>'
         return table_object
+    def invert_selection(self, db, variable, row) -> str:
+        # we need to invert for both pivoted and non-pivoted tables
+        if self.row is None and self.col is None:
+            # we assume the javascript does the heavy lifting of extracting the PK
+            # this is basically a noop
+            return row
+        raise Exception("pivot invert not implemented yet")
     def sql(self, db):
         ret = ''
         # need to determine if the table should be a pivot or a raw info
@@ -87,12 +94,23 @@ class Table(Plot):
         if self.row is None and self.col is None:
             ret = 'select '
             data = ''
+            # automatically hiding a primary key in every table for invertibility is unfortunately 
+            # not immediately viable bc you'd be regenerating row_number() unless you ALSO built
+            # the cardinalehedron. LATER. For now we yell at the user when they try to invert a raw
+            # table if a unique field isn't in the table
+            #
+            #data = self.value[0].split('.')[0]
+            #pk = db.sql(f"select primary key from information_schema.columns where table_name = '{data}' ").fetchall()[0]
+            ## if you do not have a PK one will be supplied for you
+            #if pk is None:
+            #    ret += 'row_number() over (),'
             for v in self.value:
                 #print(v)
                 v = v.split('.')
                 data = v[0]
                 ret += f'{v[1]},'
-            ret += f' from {data}'
+            ret += f' from {data} '
+            ret += 'limit 10' # this will be swapped out with pagination logic
         else:
             col_values = db.query(f"select distinct {self.col} from '{self.data_name}'").fetchall()
             col_values = [c[0] for c in col_values]
@@ -128,7 +146,7 @@ class Dot(Plot):
         self.color = color
         self.size  = size
         self.param = None
-    def invert_selection(self, db, variable, pixel:float) -> float:
+    def invert_selection(self, db, variable:str, pixel:float) -> float:
         # so wasteful lol. but premature optimization...
         if variable == 'x':
             offset = 50 if self.ticks[0] != 0 else 0
@@ -149,14 +167,21 @@ class Dot(Plot):
         if self.param is not None:
             x = 1 if 'x' in self.param['variables'] else 0
             y = 1 if 'y' in self.param['variables'] else 0
-            dot_plot += f'''onmousemove="move_listener(event,{x},{y})" onmouseup="up_listener(event.target,'{self.param['name']}', {x}, {y})"'''
+            dot_plot += f'''onmousemove="interval_move_listener(event,{x},{y})" onmouseup="interval_up_listener(event.target,'{self.param['name']}', {x}, {y})"'''
         dot_plot += '>'
         # if it errors out after this type cast we just let it. The user has to supply columns w/ correct data types
         res = db.sql(f'select min({self.x}::float), max({self.x}::float), min({self.y}::float), max({self.y}::float) from {self.data_name}').fetchall()[0]
         minx, maxx, miny, maxy = res
         #print(minx, maxx, miny, maxy)
-        for d in db.sql(sql).fetchall():
-            dot_plot += f'<circle transform="translate({50}, {-15})" cx="{((d[0] - minx) * self.height) / (maxx - minx)}" cy="{600 - (((d[1] - miny) * 600) / (maxy - miny))}" r="2" color="black"/>\n'
+        if self.color:
+            for d in db.sql(sql).fetchall():
+                dot_plot += f'<circle transform="translate({50}, {-15})" cx="{((d[0] - minx) * self.height) / (maxx - minx)}" cy="{600 - (((d[1] - miny)*600) / (maxy - miny))}" '
+                dot_plot += f'r="2" '
+                dot_plot += f'color="{d[2]}"/>\n'
+        else:
+            for d in db.sql(sql).fetchall():
+                dot_plot += f'<circle transform="translate({50}, {-15})" cx="{((d[0] - minx) * self.height) / (maxx - minx)}" cy="{600 - (((d[1] - miny) * 600) / (maxy - miny))}"'
+                dot_plot += f'r="2"'
         if self.ticks is not None:
             for xt in range(0, self.width + 50,  int(self.width / self.ticks[0])):
                 dot_plot += f'<text class="tickMark" x="{xt}" y="{self.height + 15}">{(xt * ((maxx - minx) / self.width)) + minx}</text>'
@@ -166,8 +191,10 @@ class Dot(Plot):
         return dot_plot
     def sql(self, db):
         ret = f'select {self.x}, {self.y},'
+        # color can either be a hexcode or a SQL column expression that returns hex
+        # eventually it can be a categorical column
         if self.color is not None:
-            ret += f' {self.color}, '
+            ret += f' {self.color}'
         if self.size is not None:
             ret += f' {self.size} '
         ret += f"from {self.data_name} "

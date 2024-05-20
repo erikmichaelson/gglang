@@ -179,6 +179,19 @@ def parse(db:duckdb.DuckDBPyConnection, text: str) -> {int: Plot}:
             plt.data_name = param_source
             db.sql(f"update data set plot_dependencies = list_append(plot_dependencies, {PLOT_ID}) where name = '{param_source}' ")
             plt.y = l[1]
+        elif l[0] == 'color':
+            fields = lex(l)
+            if '$' in fields[1]:
+            # what I'm running into in this example is whether an encoding can be directly
+            # dependent on a parameter for a literal value (unnamed data stream).
+            # I definitely think it should be able to, but that's a bit more difficult to
+            # code. The other big difference is that for SQL encoding fields they're just
+            # columns, not full tables, so you can't do the strategy of making a view and
+            # then select *, you need to have an anonymous view for the whole plot's
+            # data source. Maybe that should be it. Each plot gets an anonymous data source
+            # as an aside, this makes the "compilation" easier since we'd explicitly track
+            # which columns are used so we can ignore / compress later
+            db.sql("update data set plot_dependencies = list_append(plot_dependencies, {PLOT_ID}) where name = '{param_source}' ")
 
         #######  OTHER  #######
         elif l[0] == 'param':
@@ -186,9 +199,16 @@ def parse(db:duckdb.DuckDBPyConnection, text: str) -> {int: Plot}:
             plt.param = {'name':l[1] , 'variables': l[2:]}
             for i in range(2, len(l)):
                 # we assume these are numerical ranges for now
-                assert l[i] in ['x', 'y']
-                db.sql(f"insert into params (name, variable, def) values ('{l[1]}', 'min{l[i]}', {-sys.maxsize - 1});")
-                db.sql(f"insert into params (name, variable, def) values ('{l[1]}', 'max{l[i]}', {sys.maxsize});")
+                if l[i] in ['x', 'y']:
+                    db.sql(f"insert into params (name, variable, def) values ('{l[1]}', 'min{l[i]}', {-sys.maxsize - 1});")
+                    db.sql(f"insert into params (name, variable, def) values ('{l[1]}', 'max{l[i]}', {sys.maxsize});")
+                elif l[i] == 'row':
+                    db.sql(f"insert into params (name, variable, def) values ('{l[i]}', 'pk', NULL);")
+                elif l[1] == 'col':
+                    pass
+                    #db.sql(f"insert into params (name, variable, def) values ('{l[i]}', '', {});")
+                else:
+                    raise Exception("Only x, y, rows and columns can be params")
         elif l[0] == 'limit':
             plt.limit = l[1]
         elif l[0] == 'ticks':
