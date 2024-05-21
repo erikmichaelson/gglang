@@ -182,6 +182,7 @@ def parse(db:duckdb.DuckDBPyConnection, text: str) -> {int: Plot}:
         elif l[0] == 'color':
             fields = lex(l)
             if '$' in fields[1]:
+                pass
             # what I'm running into in this example is whether an encoding can be directly
             # dependent on a parameter for a literal value (unnamed data stream).
             # I definitely think it should be able to, but that's a bit more difficult to

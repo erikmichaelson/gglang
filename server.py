@@ -1,4 +1,4 @@
-from flask import Flask, request
+from flask import Flask, request, redirect
 import typing
 import duckdb
 import parse
@@ -13,7 +13,7 @@ HTML =  '''
 window.onload = (() => {
     var data = document.getElementsByTagName("td");
     for(const d of data) {
-        d.addEventListener("click", (d) => {return table_click_listener(d.srcElement, );} );
+        d.addEventListener("click", (d) => {return table_click_listener(d.srcElement, "param", 0, 0);} );
     }
 });
 
@@ -29,7 +29,7 @@ function table_click_listener(clicked_element, param_name, row, col) {
             fetch('/param_update_plots', {
                 method: "POST",
                 headers: { "Content-type" : "application/json" },
-                body: JSON.stringify({plot_id: pid, name: param_name, v_vs:{pk: None}});
+                body: JSON.stringify({plot_id: pid, name: param_name, v_vs:{pk: None}})
             })
             return;
         }
@@ -73,7 +73,7 @@ function table_click_listener(clicked_element, param_name, row, col) {
     fetch('/param_update_plots', {
         method: "POST",
         headers: { "Content-type" : "application/json" },
-        body: JSON.stringify({name:param_name, , vardict}),
+        body: JSON.stringify({plot_id: pid, name:param_name, v_vs: vardict}),
     }).then(function(response) {
         return response.text();
     }).then(function(HTML) {
@@ -107,23 +107,23 @@ function interval_move_listener(event, x, y) {
         }
         if(x) {
             if(!i_x) {
-                i_x = event.pageX;
+                i_x = event.offsetX;
             }
             if(!y) {
                 working_selector.setAttribute('height', working_selector.parentElement.height.animVal.value);
             }
-            f_x = event.pageX;
+            f_x = event.offsetX;
             working_selector.setAttribute('x', Math.min(f_x, i_x));
             working_selector.setAttribute('width',  Math.abs(f_x - i_x));
         }
         if(y) {
             if(!i_y) {
-                i_y = event.pageY;
+                i_y = event.offsetY;
             }
             if(!x) {
                 working_selector.setAttribute('width', working_selector.parentElement.width.animVal.value);
             }
-            f_y = event.pageY;
+            f_y = event.offsetY;
             working_selector.setAttribute('y', Math.min(f_y, i_y));
             working_selector.setAttribute('height', Math.abs(f_y - i_y));
         }
@@ -180,10 +180,52 @@ svg text{
     opacity: 0.5;
     background: blue;
 }
-</style>'''
 
+body {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+}
+.editor
+.viewer {
+    margin: 0;
+    padding: 0;
+    width:  59vw;
+    height: 100%;
+    display: block;
+    float:  right;
+}
+.editor {
+    float: left;
+    background: lightgrey;
+    width: 40vw;
+}
+textarea {
+    background: inherit;
+    width:100%;
+    height:95%;
+}
+.editor > form {
+    width: 100%;
+    height: 100%;
+    background: inherit;
+}
+</style>
+'''
+
+code = None
 plots = {}
 conn = duckdb.connect(':memory:')
+
+@app.route('/read_code', methods=['POST'])
+def read_code():
+    # reset, scorch earth on the DB (change this later)
+    conn = duckdb.connect(':memory:')
+    plots = parse.parse(conn, request.form.get('code'))
+    return redirect("/")
+    
 
 @app.route('/param_update_plots', methods=['POST'])
 def param_update_plots() -> [{}]:
@@ -217,27 +259,47 @@ def param_update_plots() -> [{}]:
             for d in dependencies:
                 if p == d:
                     print(f'updating plot #{p}')
-                    #ret.append({'plot_id':p , 'html':plots[p].html(conn, str(p))})
-    print(ret)
+                    ret.append({'plot_id':p , 'html':plots[p].html(conn, str(p))})
+    print("returning:", len(ret) ,ret)
     return json.dumps(ret)
 
 @app.route('/query', methods=['POST'])
 def query():
     return conn.sql(request.get_json()).pl()._repr_html_()
 
-@app.route('/')
-def index():
-    global HTML
-    return HTML
-
-if __name__ == '__main__':
+def format_plots(plots):
     # the database stores all of the parsed params and streams needed at runtime
-    plots = parse.parse(conn, open(sys.argv[1]).read())
     print("params still visibile back in server main:", conn.sql("select distinct name, data_dependencies from params;").fetchall())
     print("data still visibile back in server main:", conn.sql("select distinct name, plot_dependencies from data;").fetchall())
     print(len(plots), 'plots displaying')
+    ret = ''
     for p in plots:
         sql = plots[p].sql(conn)
         print(sql)
-        HTML += plots[p].html(conn, p)
+        ret += plots[p].html(conn, p)
+    ret += '</div></body>' # close out the viewer div
+    return ret
+
+@app.route('/', methods=['GET','POST'])
+def index():
+    ret = HTML
+    ret += f"""
+        <body>
+          <div class="editor">
+            <form action="/read_code" method="POST">
+              <textarea name="code">{code}</textarea>
+              <input type="submit" value="Render >>" style="font-size: 20pt;"/>
+            </form>
+          </div>
+          <div class="viewer">
+        """
+    ret += format_plots(plots)
+    return ret
+
+if __name__ == '__main__':
+    if(len(sys.argv) == 2):
+        code = open(sys.argv[1]).read()
+        plots = parse.parse(conn, code)
+    else:
+        plots = {}
     app.run()

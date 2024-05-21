@@ -181,7 +181,7 @@ class Dot(Plot):
         else:
             for d in db.sql(sql).fetchall():
                 dot_plot += f'<circle transform="translate({50}, {-15})" cx="{((d[0] - minx) * self.height) / (maxx - minx)}" cy="{600 - (((d[1] - miny) * 600) / (maxy - miny))}"'
-                dot_plot += f'r="2"'
+                dot_plot += f'r="2"/>'
         if self.ticks is not None:
             for xt in range(0, self.width + 50,  int(self.width / self.ticks[0])):
                 dot_plot += f'<text class="tickMark" x="{xt}" y="{self.height + 15}">{(xt * ((maxx - minx) / self.width)) + minx}</text>'
