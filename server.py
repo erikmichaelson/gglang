@@ -6,7 +6,7 @@ import sys
 from gg_types import *
 import json
 
-app = Flask(__name__)
+app = Flask("__name__")
 
 HTML =  '''
 <script>
@@ -215,15 +215,20 @@ textarea {
 </style>
 '''
 
-code = None
+code = ''
 plots = {}
 conn = duckdb.connect(':memory:')
 
 @app.route('/read_code', methods=['POST'])
 def read_code():
     # reset, scorch earth on the DB (change this later)
-    conn = duckdb.connect(':memory:')
-    plots = parse.parse(conn, request.form.get('code'))
+    # change: don't make a new DB, but remove all params and data
+    conn.sql('delete from data;')
+    conn.sql('delete from params;')
+    global code
+    code = request.form.get('code')
+    print("code in read_code",code)
+    plots = parse.parse(conn, code)
     return redirect("/")
     
 
@@ -297,9 +302,13 @@ def index():
     return ret
 
 if __name__ == '__main__':
-    if(len(sys.argv) == 2):
+    conn.sql("create table params (name text, variable text, value float, def float, data_dependencies text[]); ")
+    conn.sql("create table data (name text, code text, plot_dependencies int[]); ")
+    print("tables: ",conn.sql("select table_name from information_schema.tables").fetchall())
+    if(code == '' and len(sys.argv) == 2):
         code = open(sys.argv[1]).read()
         plots = parse.parse(conn, code)
     else:
         plots = {}
-    app.run()
+    from waitress import serve
+    serve(app, host='localhost', port='5000')

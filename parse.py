@@ -19,7 +19,7 @@ def lex(line: str) -> [str]:
             depth += 1
         elif c == ']':
             depth -= 1
-            assert depth >= 0, f"ERROR: unmatched ']' character # {i} : {c}"
+            #assert depth >= 0, f"ERROR: unmatched ']' character # {i} : {c}"
             if depth == 0:
                 ret.append(line[start:i+1])
                 start = i + 1
@@ -29,7 +29,7 @@ def lex(line: str) -> [str]:
             depth += 1
         elif c == ')':
             depth -= 1
-            assert depth >= 0, f"ERROR: unmatched ')' character # {i} : {c}"
+            #assert depth >= 0, f"ERROR: unmatched ')' character # {i} : {c}"
             if depth == 0:
                 ret.append(line[start:i+1])
         elif c == ' ':
@@ -49,8 +49,6 @@ def parse(db:duckdb.DuckDBPyConnection, text: str) -> {int: Plot}:
     text = text.lower()
     lines = text.split('\n')
     ret = {}
-    db.sql("create table params (name text, variable text, value float, def float, data_dependencies text[]); ")
-    db.sql("create table data (name text, code text, plot_dependencies int[]); ")
 
     PLOT_ID = 0
     plt = Plot()
@@ -66,7 +64,7 @@ def parse(db:duckdb.DuckDBPyConnection, text: str) -> {int: Plot}:
             raise Exception("ERROR: streams don't exist anymore, everything is data")
         elif l[0] == 'data':
             data_source = l[1] # this will be a sql expression or raw data_source
-            assert len(l) == 3, "ERROR: need format 'data [SQL | PATH] [DATA_ALIAS]'"
+            #assert len(l) == 3, "ERROR: need format 'data [SQL | PATH] [DATA_ALIAS]'"
             data_alias = l[2]
             if data_source[0] == '(':
                 # todo:  actually escape this live sql better... :/
@@ -79,68 +77,68 @@ def parse(db:duckdb.DuckDBPyConnection, text: str) -> {int: Plot}:
         #######  PLOTS  #######
         elif l[0] == 'table':
             if(plt.plot_type is not None):
-                assert plt.data_name is not None, "ERROR: no data source specified for this plot"
+                #assert plt.data_name is not None, "ERROR: no data source specified for this plot"
                 ret.update({PLOT_ID: plt})
                 PLOT_ID += 1
             plt = Table()
             print(f'table init called, {plt.plot_type}')
         elif l[0] == 'dot':
             if(plt.plot_type is not None):
-                assert plt.data_name is not None, "ERROR: no data source specified for this plot"
+                #assert plt.data_name is not None, "ERROR: no data source specified for this plot"
                 ret.update({PLOT_ID: plt})
                 PLOT_ID += 1
             plt = Dot()
         elif l[0] == 'map':
             if(plt.plot_type is not None):
-                assert plt.data_name is not None, "ERROR: no data source specified for this plot"
+                #assert plt.data_name is not None, "ERROR: no data source specified for this plot"
                 ret.update({PLOT_ID: plt})
                 PLOT_ID += 1
             plt = Map()
         elif l[0] == 'text':
             if(plt.plot_type is not None):
-                assert plt.data_name is not None, "ERROR: no data source specified for this plot"
+                #assert plt.data_name is not None, "ERROR: no data source specified for this plot"
                 ret.update({PLOT_ID: plt})
                 PLOT_ID += 1
             plt = Text()
 
         #######  ENCODINGS  #######
         elif l[0] == 'row':
-            assert plt.plot_type == 'TABLE', f'plot type = {plt.plot_type}'
+            #assert plt.plot_type == 'TABLE', f'plot type = {plt.plot_type}'
             try:
                 param_source = l[1].split('.')[0]
             except:
                 raise Exception("ERROR: you need to specify the data source name for each encoding")
-            assert plt.data_name is None or plt.data_name == param_source, f"ERROR: all encodings in the same plot need to have same source {param_source} vs {plt.data_name}"
+            #assert plt.data_name is None or plt.data_name == param_source, f"ERROR: all encodings in the same plot need to have same source {param_source} vs {plt.data_name}"
             plt.data_name = param_source
             db.sql(f"update data set plot_dependencies = list_append(plot_dependencies, {PLOT_ID}) where name = '{param_source}' ")
             plt.row = l[1]
         elif l[0] == 'col':
-            assert plt.plot_type == 'TABLE', f'plot type = {plt.plot_type}'
+            #assert plt.plot_type == 'TABLE', f'plot type = {plt.plot_type}'
             try:
                 param_source = l[1].split('.')[0]
             except:
                 raise Exception("ERROR: you need to specify the data source name for each encoding")
-            assert plt.data_name is None or plt.data_name == param_source, f"ERROR: all encodings in the same plot need to have same source {param_source} vs {plt.data_name}"
+            #assert plt.data_name is None or plt.data_name == param_source, f"ERROR: all encodings in the same plot need to have same source {param_source} vs {plt.data_name}"
             plt.data_name = param_source
             db.sql(f"update data set plot_dependencies = list_append(plot_dependencies, {PLOT_ID}) where name = '{param_source}' ")
             plt.col = l[1]
         elif l[0] == 'geometry':
-            assert plt.plot_type == 'MAP', f'plot type = {plt.plot_type}'
+            #assert plt.plot_type == 'MAP', f'plot type = {plt.plot_type}'
             try:
                 param_source = l[1].split('.')[0]
             except:
                 raise Exception("ERROR: you need to specify the data source name for each encoding")
-            assert plt.data_name is None or plt.data_name == param_source, f"ERROR: all encodings in the same plot need to have same source {param_source} vs {plt.data_name}"
+            #assert plt.data_name is None or plt.data_name == param_source, f"ERROR: all encodings in the same plot need to have same source {param_source} vs {plt.data_name}"
             plt.data_name = param_source
             db.sql(f"update data set plot_dependencies = list_append(plot_dependencies, {PLOT_ID}) where name = '{param_source}' ")
             plt.geometry = l[1]
         elif l[0] == 'value':
-            assert plt.plot_type in ['TABLE','TEXT'], f'plot type = {plt.plot_type}'
+            #assert plt.plot_type in ['TABLE','TEXT'], f'plot type = {plt.plot_type}'
             # value can now either be a list or a single value
             # eval is hideously unsafe lol
             str_list = []
             if l[1][0] == '[' and l[1][-1] == ']':
-                assert plt.plot_type == 'TABLE', f'only TABLE types can have list values (plot_type = {plt.plot_type})'
+                #assert plt.plot_type == 'TABLE', f'only TABLE types can have list values (plot_type = {plt.plot_type})'
                 l[1] = l[1][1:-1]
                 str_list = [s.strip() for s in l[1].split(',')]
             else:
@@ -153,29 +151,29 @@ def parse(db:duckdb.DuckDBPyConnection, text: str) -> {int: Plot}:
                     param_source = value.split('.')[0]
                 except:
                     raise Exception("ERROR: you need to specify the data source name for each encoding")
-                assert plt.data_name is None or plt.data_name == param_source, f"ERROR: all encodings in the same plot need to have same source {param_source} vs {plt.data_name}"
+                #assert plt.data_name is None or plt.data_name == param_source, f"ERROR: all encodings in the same plot need to have same source {param_source} vs {plt.data_name}"
                 plt.data_name = param_source
                 fail = db.sql(f"""update data set plot_dependencies = list_append(plot_dependencies, {PLOT_ID}) where name = '{param_source}'
                                 returning name, plot_dependencies""").fetchall()
-                assert len(fail) == 1, f"ERROR: cannot set plot as a datasource dependent {fail}"
+                #assert len(fail) == 1, f"ERROR: cannot set plot as a datasource dependent {fail}"
             plt.value = l[1]
         elif l[0] == 'x':
-            assert plt.plot_type == 'DOT'
+            #assert plt.plot_type == 'DOT'
             try:
                 param_source = l[1].split('.')[0]
             except:
                 raise Exception("ERROR: you need to specify the data source name for each encoding")
-            assert plt.data_name is None or plt.data_name == param_source, f"ERROR: all encodings in the same plot need to have same source {param_source} vs {plt.data_name}"
+            #assert plt.data_name is None or plt.data_name == param_source, f"ERROR: all encodings in the same plot need to have same source {param_source} vs {plt.data_name}"
             plt.data_name = param_source
             db.sql(f"update data set plot_dependencies = list_append(plot_dependencies, {PLOT_ID}) where name = '{param_source}' ")
             plt.x = l[1]
         elif l[0] == 'y':
-            assert plt.plot_type == 'DOT'
+            #assert plt.plot_type == 'DOT'
             try:
                 param_source = l[1].split('.')[0]
             except:
                 raise Exception("ERROR: you need to specify the data source name for each encoding")
-            assert plt.data_name is None or plt.data_name == param_source, f"ERROR: all encodings in the same plot need to have same source {param_source} vs {plt.data_name}"
+            #assert plt.data_name is None or plt.data_name == param_source, f"ERROR: all encodings in the same plot need to have same source {param_source} vs {plt.data_name}"
             plt.data_name = param_source
             db.sql(f"update data set plot_dependencies = list_append(plot_dependencies, {PLOT_ID}) where name = '{param_source}' ")
             plt.y = l[1]
@@ -196,7 +194,7 @@ def parse(db:duckdb.DuckDBPyConnection, text: str) -> {int: Plot}:
 
         #######  OTHER  #######
         elif l[0] == 'param':
-            assert plt.plot_type is not None
+            #assert plt.plot_type is not None
             plt.param = {'name':l[1] , 'variables': l[2:]}
             for i in range(2, len(l)):
                 # we assume these are numerical ranges for now
@@ -226,7 +224,7 @@ def parse(db:duckdb.DuckDBPyConnection, text: str) -> {int: Plot}:
     print(data_strings)
     for alias, code in data_strings:
         ps = re.findall('\$(\w+)\.(\w+)', code)
-        if ps is not None:
+        if len(ps) > 0:
             print(ps)
             for p in ps:
                 db.sql(f"update params set data_dependencies = list_append(data_dependencies, '{alias}') where name = '{p[0]}' and variable = '{p[1]}' ")
@@ -237,9 +235,11 @@ def parse(db:duckdb.DuckDBPyConnection, text: str) -> {int: Plot}:
                     code = code.replace(f'${p[0]}.{p[1]}', str(d[0])).replace("''", "'")
                 except:
                     print("USER ERROR: data expression depends on a parameter variable that doesn't exist")
-                    exit()
-            print(f'bound (defaults filled code: create view {alias} as {code}')
-        db.sql(f'create view {alias} as {code}')
+                    #exit()
+            print(f'bound (defaults filled code: create or replace view {alias} as {code}')
+        else:
+            print(f'bound (no params) code: create or replace view {alias} as {code}')
+        db.sql(f'create or replace view {alias} as {code}')
 
     print(f"params expected: {exp_p}, params in existance: {real_p}")
     # the real problem here would be if there's a used param which isn't registered.

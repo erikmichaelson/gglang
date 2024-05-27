@@ -1,4 +1,4 @@
-data (select row_number() over () as id, * from '../data/metrics_project/actually.shp' limit 1000) econ
+data (select row_number() over () as id, * from 'actually.shp' limit 1000) econ
 data (select count(*)::float as pct_in_sel from econ where econ.BuildValue between $amt.miny and $amt.maxy and econ.LandValue between $amt.minx and $amt.maxx) price_range 
 data (select CityName, SchoolDist, YearBuilt from econ where econ.BuildValue between $amt.miny and $amt.maxy and econ.LandValue between $amt.minx and $amt.maxx) si
 
