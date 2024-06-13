@@ -15,7 +15,40 @@ window.onload = (() => {
     for(const d of data) {
         d.addEventListener("click", (d) => {return table_click_listener(d.srcElement, "param", 0, 0);} );
     }
+    var form = document.getElementById("codeio");
+    form.addEventListener("submit", read_code);
 });
+
+function read_code(e) {
+    e.preventDefault();
+    fetch('/read_code', {
+        method: "POST",
+        headers: { "Content-type" : "application/json" },
+        body: JSON.stringify(e.target[0].value),
+    }).then(function(res) {
+        return res.json();
+    }).then(function(json) {
+        if(json.parserError) {
+            console.log(json);
+            const err = document.getElementsByClassName("error_tooltip")[0];
+            err.innerHTML = json.parserError.message;
+            err.setAttribute('y', json.parserError.line_no * 15);
+        }
+        else {
+            window.location.replace('/');
+        }
+    });
+}
+
+function show_parser_error(error) {
+    document.getElementById("error_tooltip").children[0].innerHTML = error.msg;
+    rail.setAttribute.setAttribute("hidden", "false");
+}
+
+function hide_parser_error() {
+    document.getElementById("error_tooltip").children[0].setAttribute("hidden", "true");
+    document.getElementById("error_tooltip").children[0].innerHTML = "";
+}
 
 var selected;
 function table_click_listener(clicked_element, param_name, row, col) {
@@ -145,6 +178,13 @@ function interval_up_listener(target, param_name, x, y) {
     }).then((res) =>{
         return res.json();
     }).then((pairs) => {
+        // on error this will be a parserError
+        if(pairs[0] == 'parserError') {
+            const tooltip = document.getElementsByClassName("error_tooltip")[0];
+            tooltip.innerHTML = pairs.parserError.message;
+            tooltip.setAttribute('y', pairs.parserError.line_no * 15);
+            console.log(pairs);
+        }
         // we expect res to be a map of {id:html} pairs 
         pairs.map((p) => {
             document.getElementById(p.plot_id).outerHTML = p.html;
@@ -202,9 +242,31 @@ body {
     background: lightgrey;
     width: 40vw;
 }
+.editor_line_rail {
+    float: left;
+    width: 5%;
+}
+.error_tooltip {
+    float: left;
+    background: red;
+    height: 15px;
+    margin-left: 25%;
+    border: 7px;
+    border-radius: 7px;
+}
+.error_tooltip > div {
+    visibility: hidden;
+    width: 15px;
+}
+.error_tooltip:hover > div {
+    visibility: visible;
+    width: auto;
+}
+
 textarea {
     background: inherit;
-    width:100%;
+    float: left;
+    width:95%;
     height:95%;
 }
 .editor > form {
@@ -220,17 +282,25 @@ plots = {}
 conn = duckdb.connect(':memory:')
 
 @app.route('/read_code', methods=['POST'])
-def read_code():
+def read_code(init_code = None):
     # reset, scorch earth on the DB (change this later)
     # change: don't make a new DB, but remove all params and data
     conn.sql('delete from data;')
     conn.sql('delete from params;')
     global code
-    code = request.form.get('code')
+    global plots
+    if init_code is not None:
+        code = init_code
+    else:
+        code = request.get_json()#form.get('code')
     print("code in read_code",code)
-    plots = parse.parse(conn, code)
-    return redirect("/")
-    
+    try:
+        plots = parse.parse(conn, code)
+        ret = index()
+        return ret
+    except parse.ParserError as p:
+        print("error in read_code")
+        return json.dumps({"parserError" : {"line_no": p.line_no, "message":p.message}})
 
 @app.route('/param_update_plots', methods=['POST'])
 def param_update_plots() -> [{}]:
@@ -264,7 +334,12 @@ def param_update_plots() -> [{}]:
             for d in dependencies:
                 if p == d:
                     print(f'updating plot #{p}')
-                    ret.append({'plot_id':p , 'html':plots[p].html(conn, str(p))})
+                    html
+                    try:
+                        html = plots[p].html(conn, str(p))
+                    except Exception as e:
+                        return json.dumps({'parserError': {'line_no':0, 'message':str(e)}})
+                    ret.append({'plot_id':p , 'html':html})
     print("returning:", len(ret) ,ret)
     return json.dumps(ret)
 
@@ -281,24 +356,33 @@ def format_plots(plots):
     for p in plots:
         sql = plots[p].sql(conn)
         print(sql)
-        ret += plots[p].html(conn, p)
+        try:
+            ret += plots[p].html(conn, p)
+        except Exception as e:
+            print("error in making plots")
+            raise parse.ParserError(0, str(e))
     ret += '</div></body>' # close out the viewer div
     return ret
 
 @app.route('/', methods=['GET','POST'])
 def index():
+    print("index called")
     ret = HTML
     ret += f"""
         <body>
           <div class="editor">
-            <form action="/read_code" method="POST">
+            <form id="codeio">
+              <div class="editor_line_rail"><div class="error_tooltip"><div></div></div></div>
               <textarea name="code">{code}</textarea>
               <input type="submit" value="Render >>" style="font-size: 20pt;"/>
             </form>
           </div>
           <div class="viewer">
         """
-    ret += format_plots(plots)
+    try:
+        ret += format_plots(plots)
+    except parse.ParserError as p:
+       raise p
     return ret
 
 if __name__ == '__main__':
@@ -307,7 +391,7 @@ if __name__ == '__main__':
     print("tables: ",conn.sql("select table_name from information_schema.tables").fetchall())
     if(code == '' and len(sys.argv) == 2):
         code = open(sys.argv[1]).read()
-        plots = parse.parse(conn, code)
+        read_code(code) # this will return an error to the GUI if there's one in the code
     else:
         plots = {}
     from waitress import serve

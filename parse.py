@@ -3,6 +3,11 @@ import sys
 from gg_types import *
 import re
 
+class ParserError(Exception):
+    def __init__(self, line_no, message):
+        self.message = message
+        self.line_no = line_no
+
 # to make it easy one element can't wrap over a line.
 # break characters are parens and spaces - if they're not wrapped in parens
 # max depth we deal with here is 1
@@ -53,7 +58,7 @@ def parse(db:duckdb.DuckDBPyConnection, text: str) -> {int: Plot}:
     PLOT_ID = 0
     plt = Plot()
     param_source = None
-    for l in lines:
+    for i, l in enumerate(lines):
         #l = [l for l in l.strip().split(' ') if l != '']
         l = lex(l)
         print(l)
@@ -61,7 +66,7 @@ def parse(db:duckdb.DuckDBPyConnection, text: str) -> {int: Plot}:
             continue
         #######  DATA TYPES  #######
         elif l[0] == 'stream':
-            raise Exception("ERROR: streams don't exist anymore, everything is data")
+            raise ParserError("ERROR: streams don't exist anymore, everything is data", i)
         elif l[0] == 'data':
             data_source = l[1] # this will be a sql expression or raw data_source
             #assert len(l) == 3, "ERROR: need format 'data [SQL | PATH] [DATA_ALIAS]'"
@@ -150,7 +155,7 @@ def parse(db:duckdb.DuckDBPyConnection, text: str) -> {int: Plot}:
                 try:
                     param_source = value.split('.')[0]
                 except:
-                    raise Exception("ERROR: you need to specify the data source name for each encoding")
+                    raise ParserError("ERROR: you need to specify the data source name for each encoding", i)
                 #assert plt.data_name is None or plt.data_name == param_source, f"ERROR: all encodings in the same plot need to have same source {param_source} vs {plt.data_name}"
                 plt.data_name = param_source
                 fail = db.sql(f"""update data set plot_dependencies = list_append(plot_dependencies, {PLOT_ID}) where name = '{param_source}'
@@ -162,7 +167,7 @@ def parse(db:duckdb.DuckDBPyConnection, text: str) -> {int: Plot}:
             try:
                 param_source = l[1].split('.')[0]
             except:
-                raise Exception("ERROR: you need to specify the data source name for each encoding")
+                raise ParserError("ERROR: you need to specify the data source name for each encoding", i)
             #assert plt.data_name is None or plt.data_name == param_source, f"ERROR: all encodings in the same plot need to have same source {param_source} vs {plt.data_name}"
             plt.data_name = param_source
             db.sql(f"update data set plot_dependencies = list_append(plot_dependencies, {PLOT_ID}) where name = '{param_source}' ")
@@ -172,7 +177,7 @@ def parse(db:duckdb.DuckDBPyConnection, text: str) -> {int: Plot}:
             try:
                 param_source = l[1].split('.')[0]
             except:
-                raise Exception("ERROR: you need to specify the data source name for each encoding")
+                raise ParserError("ERROR: you need to specify the data source name for each encoding", i)
             #assert plt.data_name is None or plt.data_name == param_source, f"ERROR: all encodings in the same plot need to have same source {param_source} vs {plt.data_name}"
             plt.data_name = param_source
             db.sql(f"update data set plot_dependencies = list_append(plot_dependencies, {PLOT_ID}) where name = '{param_source}' ")
@@ -207,7 +212,7 @@ def parse(db:duckdb.DuckDBPyConnection, text: str) -> {int: Plot}:
                     pass
                     #db.sql(f"insert into params (name, variable, def) values ('{l[i]}', '', {});")
                 else:
-                    raise Exception("Only x, y, rows and columns can be params")
+                    raise ParserError("Only x, y, rows and columns can be params", i)
         elif l[0] == 'limit':
             plt.limit = l[1]
         elif l[0] == 'ticks':
@@ -245,8 +250,9 @@ def parse(db:duckdb.DuckDBPyConnection, text: str) -> {int: Plot}:
     # the real problem here would be if there's a used param which isn't registered.
     # if there's just an extra param we can ignore it and warn
     if exp_p.sort() != real_p.sort():
-        print("ERROR: expected and registered params aren't the same")
+        raise ParserError("ERROR: expected and registered params aren't the same", -1)
 
+    print("length of ret in parse:", len(ret))
     return ret
 
 if __name__ == '__main__':
