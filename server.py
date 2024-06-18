@@ -334,7 +334,7 @@ def param_update_plots() -> [{}]:
             for d in dependencies:
                 if p == d:
                     print(f'updating plot #{p}')
-                    html
+                    html = ''
                     try:
                         html = plots[p].html(conn, str(p))
                     except Exception as e:

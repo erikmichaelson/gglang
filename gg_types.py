@@ -67,14 +67,16 @@ class Map(Plot):
         limit = f' limit {self.limit} ' if self.limit else ''
         ret += f"from '{self.data_name}' {limit}) to 'test.geojson' with (format gdal, driver geojson);"
         return ret
+    def __eq__(self, other):
+        return self.__dict__ == other.__dict__
 
 class Table(Plot):
-    def __init__(self, row=None, col=None, value=None):
+    def __init__(self, row=None, col=None, value=None, data_name=None):
         self.plot_type = 'TABLE'
-        self.data_name = None
         self.row    = row
         self.col    = col
         self.value  = value
+        self.data_name = data_name
     def html(self, db, _id):
         table_object = f'<div id="{_id}"><div class="query">{self.sql(db)}</div>'
         table_object += db.sql(self.sql(db)).pl()._repr_html_()
@@ -133,11 +135,13 @@ class Table(Plot):
                 ret += ',\n' # duckdb is ok with trailing commas
             ret += f"from '{self.data_name}' group by {self.row}"
         return ret
+    def __eq__(self, other):
+        return self.__dict__ == other.__dict__
 
 class Dot(Plot):
-    def __init__(self, x=None, y=None, color=None, size=None):
+    def __init__(self, x=None, y=None, data_name=None, color=None, size=None, param=None):
         self.plot_type = 'DOT'
-        self.data_name = None
+        self.data_name = data_name
         self.height = 600
         self.width = 600
         self.ticks = [5,5]
@@ -145,7 +149,7 @@ class Dot(Plot):
         self.y = y
         self.color = color
         self.size  = size
-        self.param = None
+        self.param = param
     def invert_selection(self, db, variable:str, pixel:float) -> float:
         # so wasteful lol. but premature optimization...
         if variable == 'x':
@@ -199,6 +203,8 @@ class Dot(Plot):
             ret += f' {self.size} '
         ret += f"from {self.data_name} "
         return ret
+    def __eq__(self, other):
+        return self.__dict__ == other.__dict__
 
 class Line(Plot):
     def __init__(self):
@@ -216,14 +222,16 @@ class Line(Plot):
         return line_plot
     def sql(self, db):
         pass
+    def __eq__(self, other):
+        return self.__dict__ == other.__dict__
 
 class Text(Plot):
-    def __init__(self):
+    def __init__(self, x=None, y=None, value=None,data_name=None):
         self.plot_type = 'TEXT'
-        self.x = None
-        self.y = None
-        self.value = None
-        self.data_name = None
+        self.x = x
+        self.y = y
+        self.value = value
+        self.data_name = data_name
     def sql(self, db):
         ret = f'select {self.value[0]} '
         assert self.value is not None, "VALUE needed for Text plot type"
@@ -249,3 +257,5 @@ class Text(Plot):
             raise Exception("Double variable TEXT not implemented")
         ret += '</div>'
         return ret
+    def __eq__(self, other):
+        return self.__dict__ == other.__dict__
