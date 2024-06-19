@@ -1,4 +1,5 @@
 from flask import Flask, request, redirect
+from flask_socketio import SocketIO
 import typing
 import duckdb
 import parse
@@ -7,8 +8,12 @@ from gg_types import *
 import json
 
 app = Flask("__name__")
+socketio = SocketIO(app)
+socketio.init_app(app, cors_allowed_origins='*')
 
 HTML =  '''
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js" integrity="sha512-q/dWJ3kcmjBLU4Qc47E4A9kTB4m3wuTY7vkFJDTZKjTs8jhyGQnaUrxa0Ytd0ssMZhbNua9hE+E7Qv1j+DyZwA==" crossorigin="anonymous"></script>
+
 <script>
 window.onload = (() => {
     var data = document.getElementsByTagName("td");
@@ -19,13 +24,24 @@ window.onload = (() => {
     form.addEventListener("submit", read_code);
 });
 
+var socket = io();
+socket.on('connect', function() {
+    socket.emit('my event', {data: "I'm connected!"});
+    console.log("socket connected");
+});
+
+socket.emit('test', function(ret) { console.log(res); });
+
 function read_code(e) {
     e.preventDefault();
-    fetch('/read_code', {
+    /*fetch('/read_code', {
         method: "POST",
         headers: { "Content-type" : "application/json" },
         body: JSON.stringify(e.target[0].value),
-    }).then(function(res) {
+    })*/
+    socket.emit(
+        JSON.stringify(e.target[0].value)
+    ).then(function(res) {
         return res.json();
     }).then(function(json) {
         if(json.parserError) {
@@ -171,25 +187,24 @@ function interval_up_listener(target, param_name, x, y) {
         vardict['miny'] = (height - Math.max(i_y,f_y));
         vardict['maxy'] = (height - Math.min(i_y,f_y));
     }
-    fetch('/param_update_plots', {
-        method : 'POST',
-        headers: {'Content-type' : 'application/json'},
-        body : JSON.stringify({plot_id:working_selector.parentElement.parentElement.id, param: param_name, v_vs: vardict} )
-    }).then((res) =>{
-        return res.json();
-    }).then((pairs) => {
-        // on error this will be a parserError
-        if(pairs[0] == 'parserError') {
-            const tooltip = document.getElementsByClassName("error_tooltip")[0];
-            tooltip.innerHTML = pairs.parserError.message;
-            tooltip.setAttribute('y', pairs.parserError.line_no * 15);
-            console.log(pairs);
+    socket.emit("param_update_plots",
+        {plot_id:working_selector.parentElement.parentElement.id, param: param_name, v_vs: vardict}
+        // for some reason this returns a full text thing not a promise... weird
+        ,function(pairs) {
+            pairs = eval(pairs);
+            // on error this will be a parserError
+            if(pairs[0] == 'parserError') {
+                const tooltip = document.getElementsByClassName("error_tooltip")[0];
+                tooltip.innerHTML = pairs.parserError.message;
+                tooltip.setAttribute('y', pairs.parserError.line_no * 15);
+                console.log(pairs);
+            }
+            // we expect res to be a map of {id:html} pairs 
+            pairs.map((p) => {
+                document.getElementById(p.plot_id).outerHTML = p.html;
+            });
         }
-        // we expect res to be a map of {id:html} pairs 
-        pairs.map((p) => {
-            document.getElementById(p.plot_id).outerHTML = p.html;
-        });
-    })
+    );
     working_selector = null;
     i_x = null;
     f_x = null;
@@ -280,6 +295,25 @@ textarea {
 code = ''
 plots = {}
 conn = duckdb.connect(':memory:')
+app.config['SECRET_KEY'] = 'secret!'
+app.config['DEBUG'] = True
+
+
+@socketio.on('connect')
+def socket_connect():
+    print("web socket connected")
+
+@socketio.on('my event')
+def my_event(data):
+    print("my event (from on_connect)", data)
+
+@socketio.on('test')
+def sock_test():
+    return 'does this work'
+
+@socketio.on_error()
+def socket_error(e):
+    print("socket error:", e)
 
 @app.route('/read_code', methods=['POST'])
 def read_code(init_code = None):
@@ -292,8 +326,8 @@ def read_code(init_code = None):
     if init_code is not None:
         code = init_code
     else:
-        code = request.get_json()#form.get('code')
-    print("code in read_code",code)
+        code = request.get_json()
+    #print("code in read_code",code)
     try:
         plots = parse.parse(conn, code)
         ret = index()
@@ -302,15 +336,14 @@ def read_code(init_code = None):
         print("error in read_code")
         return json.dumps({"parserError" : {"line_no": p.line_no, "message":p.message}})
 
-@app.route('/param_update_plots', methods=['POST'])
-def param_update_plots() -> [{}]:
-    req = request.get_json()
-    print('param named',req['param'], '; v_vs', req['v_vs']);
+@socketio.on('param_update_plots')
+def param_update_plots(req) -> [{}]:
+    #print('param named',req['param'], '; v_vs', req['v_vs']);
     streams = conn.sql(f"""select distinct data_dependencies from params where name = '{req["param"]}' """).fetchall()
-    print(streams)
+    #print(streams)
     streams = set([j for i in [s[0] for s in streams] for j in i])
     streams = [f"'{i}'" for i in streams]
-    print(streams)
+    #print(streams)
     try:
         streams = conn.sql(f"""select name, code from data where name in ({",".join(streams)})""").fetchall()
     except:
@@ -319,28 +352,29 @@ def param_update_plots() -> [{}]:
     # plot id, new html pairs
     ret = []
     for s in streams:
-        print(s)
+        #print(s)
         swapped_data_def = s[1]
         for vv in req['v_vs']:
             #print(vv, req['v_vs'][vv], f'${req["param"]}.{vv}')
             translated_value = plots[int(req['plot_id'])].invert_selection(conn, vv[-1], req["v_vs"][vv])
-            print(req["param"]+'.'+vv +':'+str(translated_value))
+            #print(req["param"]+'.'+vv +':'+str(translated_value))
             swapped_data_def = swapped_data_def.replace(f'${req["param"]}.{vv}', f'{translated_value}')
-        print(swapped_data_def)
+        #print(swapped_data_def)
         conn.sql(f"create or replace view {s[0]} as ({swapped_data_def}) ")
         dependencies = conn.sql(f"select plot_dependencies from data where name = '{s[0]}' ").fetchall()[0][0]
-        print('plot dependencies', dependencies)
+        #print('plot dependencies', dependencies)
         for p in plots:
             for d in dependencies:
                 if p == d:
-                    print(f'updating plot #{p}')
+                    #print(f'updating plot #{p}')
                     html = ''
                     try:
                         html = plots[p].html(conn, str(p))
                     except Exception as e:
                         return json.dumps({'parserError': {'line_no':0, 'message':str(e)}})
                     ret.append({'plot_id':p , 'html':html})
-    print("returning:", len(ret) ,ret)
+    print("returning:", len(ret) )#,ret)
+    #socketio.send(json.dumps(ret))
     return json.dumps(ret)
 
 @app.route('/query', methods=['POST'])
@@ -349,13 +383,13 @@ def query():
 
 def format_plots(plots):
     # the database stores all of the parsed params and streams needed at runtime
-    print("params still visibile back in server main:", conn.sql("select distinct name, data_dependencies from params;").fetchall())
-    print("data still visibile back in server main:", conn.sql("select distinct name, plot_dependencies from data;").fetchall())
-    print(len(plots), 'plots displaying')
+    #print("params still visibile back in server main:", conn.sql("select distinct name, data_dependencies from params;").fetchall())
+    #print("data still visibile back in server main:", conn.sql("select distinct name, plot_dependencies from data;").fetchall())
+    #print(len(plots), 'plots displaying')
     ret = ''
     for p in plots:
         sql = plots[p].sql(conn)
-        print(sql)
+        #print(sql)
         try:
             ret += plots[p].html(conn, p)
         except Exception as e:
@@ -364,9 +398,9 @@ def format_plots(plots):
     ret += '</div></body>' # close out the viewer div
     return ret
 
-@app.route('/', methods=['GET','POST'])
+@app.route('/', methods=['GET'])
 def index():
-    print("index called")
+    #print("index called")
     ret = HTML
     ret += f"""
         <body>
@@ -388,11 +422,12 @@ def index():
 if __name__ == '__main__':
     conn.sql("create table params (name text, variable text, value float, def float, data_dependencies text[]); ")
     conn.sql("create table data (name text, code text, plot_dependencies int[]); ")
-    print("tables: ",conn.sql("select table_name from information_schema.tables").fetchall())
+    #print("tables: ",conn.sql("select table_name from information_schema.tables").fetchall())
     if(code == '' and len(sys.argv) == 2):
         code = open(sys.argv[1]).read()
         read_code(code) # this will return an error to the GUI if there's one in the code
     else:
         plots = {}
-    from waitress import serve
-    serve(app, host='localhost', port='5000')
+    socketio.run(app)
+    #from waitress import serve
+    #serve(app, host='localhost', port='5000')

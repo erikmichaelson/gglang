@@ -61,7 +61,7 @@ def parse(db:duckdb.DuckDBPyConnection, text: str) -> {int: Plot}:
     for i, l in enumerate(lines):
         #l = [l for l in l.strip().split(' ') if l != '']
         l = lex(l)
-        print(l)
+        #print(l)
         if l == []:
             continue
         #######  DATA TYPES  #######
@@ -86,7 +86,7 @@ def parse(db:duckdb.DuckDBPyConnection, text: str) -> {int: Plot}:
                 ret.update({PLOT_ID: plt})
                 PLOT_ID += 1
             plt = Table()
-            print(f'table init called, {plt.plot_type}')
+            #print(f'table init called, {plt.plot_type}')
         elif l[0] == 'dot':
             if(plt.plot_type is not None):
                 #assert plt.data_name is not None, "ERROR: no data source specified for this plot"
@@ -149,9 +149,9 @@ def parse(db:duckdb.DuckDBPyConnection, text: str) -> {int: Plot}:
             else:
                 str_list.append(l[1])
             l[1] = str_list
-            print(l[1])
+            #print(l[1])
             for value in l[1]:
-                print(value)
+                #print(value)
                 try:
                     param_source = value.split('.')[0]
                 except:
@@ -226,11 +226,11 @@ def parse(db:duckdb.DuckDBPyConnection, text: str) -> {int: Plot}:
     exp_p  = db.sql("select regexp_extract_all(code, '.*\$\w+.*') from data where code ~ '.*\$\w+.*' ").fetchall()
     real_p = db.sql("select name from params;").fetchall()
     data_strings = db.sql("select name, code from data ").fetchall()
-    print(data_strings)
+    #print(data_strings)
     for alias, code in data_strings:
         ps = re.findall('\$(\w+)\.(\w+)', code)
         if len(ps) > 0:
-            print(ps)
+            #print(ps)
             for p in ps:
                 db.sql(f"update params set data_dependencies = list_append(data_dependencies, '{alias}') where name = '{p[0]}' and variable = '{p[1]}' ")
                 # have to sub in defaults AND un-escape the code
@@ -240,19 +240,20 @@ def parse(db:duckdb.DuckDBPyConnection, text: str) -> {int: Plot}:
                     code = code.replace(f'${p[0]}.{p[1]}', str(d[0])).replace("''", "'")
                 except:
                     print("USER ERROR: data expression depends on a parameter variable that doesn't exist")
-                    #exit()
-            print(f'bound (defaults filled code: create or replace view {alias} as {code}')
+                    exit()
+            #print(f'bound (defaults filled code: create or replace view {alias} as {code}')
         else:
-            print(f'bound (no params) code: create or replace view {alias} as {code}')
+            pass
+            #print(f'bound (no params) code: create or replace view {alias} as {code}')
         db.sql(f'create or replace view {alias} as {code}')
 
-    print(f"params expected: {exp_p}, params in existance: {real_p}")
+    #print(f"params expected: {exp_p}, params in existance: {real_p}")
     # the real problem here would be if there's a used param which isn't registered.
     # if there's just an extra param we can ignore it and warn
     if exp_p.sort() != real_p.sort():
         raise ParserError("ERROR: expected and registered params aren't the same", -1)
 
-    print("length of ret in parse:", len(ret))
+    #print("length of ret in parse:", len(ret))
     return ret
 
 if __name__ == '__main__':
