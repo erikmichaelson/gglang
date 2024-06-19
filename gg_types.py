@@ -1,5 +1,6 @@
 import duckdb
 import json
+from time import perf_counter_ns
 
 class Agg_Value():
     def __init__(self, agg_func, ref):
@@ -79,7 +80,9 @@ class Table(Plot):
         self.data_name = data_name
     def html(self, db, _id):
         table_object = f'<div id="{_id}"><div class="query">{self.sql(db)}</div>'
+        start = perf_counter_ns()
         table_object += db.sql(self.sql(db)).pl()._repr_html_()
+        print("time in table html:", perf_counter_ns() - start)
         table_object += '<div class="res-container"></div></div>'
         return table_object
     def invert_selection(self, db, variable, row) -> str:
@@ -243,7 +246,9 @@ class Text(Plot):
         return ret
     def html(self, db, _id):
         sql = self.sql(db)
+        start = perf_counter_ns()
         res = db.sql(sql).fetchall()
+        print("time fetching text data:", perf_counter_ns() - start)
         #print(f'format of count(*) response:{res[0][0]}')
         ret = f'<div id="{_id}">'
         if(len(res[0]) == 1):

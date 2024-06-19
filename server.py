@@ -6,6 +6,7 @@ import parse
 import sys
 from gg_types import *
 import json
+from time import perf_counter_ns
 
 app = Flask("__name__")
 socketio = SocketIO(app)
@@ -24,13 +25,13 @@ window.onload = (() => {
     form.addEventListener("submit", read_code);
 });
 
-var socket = io();
+var socket = io({reconnectionAttempts:5, ackTimeout: 10000});
 socket.on('connect', function() {
     socket.emit('my event', {data: "I'm connected!"});
     console.log("socket connected");
 });
 
-socket.emit('test', function(ret) { console.log(res); });
+socket.emit('test', function(res) { console.log(res); });
 
 function read_code(e) {
     e.preventDefault();
@@ -191,6 +192,7 @@ function interval_up_listener(target, param_name, x, y) {
         {plot_id:working_selector.parentElement.parentElement.id, param: param_name, v_vs: vardict}
         // for some reason this returns a full text thing not a promise... weird
         ,function(pairs) {
+            console.log(pairs);
             pairs = eval(pairs);
             // on error this will be a parserError
             if(pairs[0] == 'parserError') {
@@ -338,14 +340,19 @@ def read_code(init_code = None):
 
 @socketio.on('param_update_plots')
 def param_update_plots(req) -> [{}]:
+    db_time = 0
+    start = perf_counter_ns()
     #print('param named',req['param'], '; v_vs', req['v_vs']);
     streams = conn.sql(f"""select distinct data_dependencies from params where name = '{req["param"]}' """).fetchall()
+    db_time += perf_counter_ns() - start
     #print(streams)
     streams = set([j for i in [s[0] for s in streams] for j in i])
     streams = [f"'{i}'" for i in streams]
     #print(streams)
     try:
+        tmark = perf_counter_ns()
         streams = conn.sql(f"""select name, code from data where name in ({",".join(streams)})""").fetchall()
+        db_time += perf_counter_ns() - tmark
     except:
         print(f"errored trying to query 'select name, code from data where name in ({','.join(streams)})' ")
     global plots
@@ -360,21 +367,28 @@ def param_update_plots(req) -> [{}]:
             #print(req["param"]+'.'+vv +':'+str(translated_value))
             swapped_data_def = swapped_data_def.replace(f'${req["param"]}.{vv}', f'{translated_value}')
         #print(swapped_data_def)
+        tmark = perf_counter_ns()
         conn.sql(f"create or replace view {s[0]} as ({swapped_data_def}) ")
         dependencies = conn.sql(f"select plot_dependencies from data where name = '{s[0]}' ").fetchall()[0][0]
-        #print('plot dependencies', dependencies)
-        for p in plots:
-            for d in dependencies:
-                if p == d:
-                    #print(f'updating plot #{p}')
-                    html = ''
-                    try:
-                        html = plots[p].html(conn, str(p))
-                    except Exception as e:
-                        return json.dumps({'parserError': {'line_no':0, 'message':str(e)}})
-                    ret.append({'plot_id':p , 'html':html})
-    print("returning:", len(ret) )#,ret)
+        db_time += perf_counter_ns() - tmark
+        print('plot dependencies', dependencies)
+        html_time = 0
+        on2_time = perf_counter_ns()
+        for d in set(dependencies):
+            p = plots[d]
+            print(f'updating plot #{p}')
+            html = ''
+            try:
+                hstart = perf_counter_ns()
+                html = p.html(conn, str(d))
+                html_time += perf_counter_ns() - hstart
+            except Exception as e:
+                return json.dumps({'parserError': {'line_no':0, 'message':str(e)}})
+            ret.append({'plot_id':d , 'html':html})
+        on2_time = perf_counter_ns() - on2_time
+    #print("returning:", len(ret) )#,ret)
     #socketio.send(json.dumps(ret))
+    print("time in python:", perf_counter_ns() - start, "time in db (approx):", db_time, "time making new html:", html_time, "time in double loop:",on2_time)
     return json.dumps(ret)
 
 @app.route('/query', methods=['POST'])
