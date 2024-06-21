@@ -150,6 +150,7 @@ class Dot(Plot):
         self.ticks = [5,5]
         self.x = x
         self.y = y
+        self.range = []
         self.color = color
         self.size  = size
         self.param = param
@@ -157,13 +158,11 @@ class Dot(Plot):
         # so wasteful lol. but premature optimization...
         if variable == 'x':
             offset = 50 if self.ticks[0] != 0 else 0
-            minx, maxx = db.sql(f'select min({self.x}::float), max({self.x}::float) from {self.data_name}').fetchall()[0]
             #print(f'[inverter] var: {variable}, input: {pixel}, output: {pixel * ((maxx - minx) / self.width) + (((maxx - minx) / self.width) * minx)}')
-            return (pixel + offset) * ((maxx - minx) / self.width) + minx
+            return (pixel + offset) * ((self.range[1] - self.range[0]) / self.width) + self.range[0]
         elif variable == 'y':
             offset = 15 if self.ticks[0] != 0 else 0
-            miny, maxy = db.sql(f'select min({self.y}::float), max({self.y}::float) from {self.data_name}').fetchall()[0]
-            return ((pixel + offset) * ((maxy - miny) / self.height)) + miny
+            return ((pixel + offset) * ((self.range[3] - self.range[2]) / self.height)) + self.range[2]
         raise Exception("DOT can only invert x and y encodings")
     def html(self, db, _id):
         sql = self.sql(db)

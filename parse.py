@@ -246,6 +246,13 @@ def parse(db:duckdb.DuckDBPyConnection, text: str) -> {int: Plot}:
             pass
             #print(f'bound (no params) code: create or replace view {alias} as {code}')
         db.sql(f'create or replace view {alias} as {code}')
+    
+    # brute force, not elegant. We need to set data ranges on Dot plots for efficiency's sake and now is the only logical time to do it
+    # would like to move this back into a parser step but not sure where that's possible because of the param / data mutual dependency
+    for p in ret.values():
+        if p.plot_type == 'DOT':
+            print("dot range set:", p.range, f"select min({p.x}), max({p.x}), min({p.y}), max({p.y}) from {p.data_name} ")
+            p.range = db.sql(f"select min({p.x}), max({p.x}), min({p.y}), max({p.y}) from {p.data_name} ").fetchall()[0]
 
     #print(f"params expected: {exp_p}, params in existance: {real_p}")
     # the real problem here would be if there's a used param which isn't registered.

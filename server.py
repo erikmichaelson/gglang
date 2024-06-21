@@ -363,7 +363,9 @@ def param_update_plots(req) -> [{}]:
         swapped_data_def = s[1]
         for vv in req['v_vs']:
             #print(vv, req['v_vs'][vv], f'${req["param"]}.{vv}')
+            set_start = perf_counter_ns()
             translated_value = plots[int(req['plot_id'])].invert_selection(conn, vv[-1], req["v_vs"][vv])
+            print("time in inversion:", perf_counter_ns() - set_start)
             #print(req["param"]+'.'+vv +':'+str(translated_value))
             swapped_data_def = swapped_data_def.replace(f'${req["param"]}.{vv}', f'{translated_value}')
         #print(swapped_data_def)
